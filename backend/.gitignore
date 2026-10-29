@@ -1,0 +1,52 @@
+# Configuration locale et secrets (conserver les exemples)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Environnements Python
+.venv/
+venv/
+env/
+ENV/
+
+# Bytecode et caches Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.tox/
+.nox/
+
+# Couverture et rapports de tests
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+junit.xml
+
+# Artifacts de construction Python
+/build/
+/dist/
+*.egg-info/
+.eggs/
+
+# Journaux et fichiers d'exécution Celery
+*.log
+*.pid
+celerybeat-schedule*
+celerybeat.pid
+
+# Réglages locaux d'IDE et fichiers système
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# Les sources, migrations Alembic, pyproject.toml et uv.lock restent versionnés.

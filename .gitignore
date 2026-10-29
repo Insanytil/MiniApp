@@ -1,0 +1,5 @@
+# Outils et captures de vérification locale de l'interface
+/.ui-review/
+
+# Réglages locaux des IDE JetBrains, à tous les niveaux du projet
+.idea/

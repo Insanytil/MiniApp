@@ -1,0 +1,47 @@
+# Configuration locale et secrets (conserver les exemples)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.local
+
+# Dépendances et résultats de compilation
+node_modules/
+/dist/
+/dist-ssr/
+
+# Caches des outils frontend
+.tanstack/
+.vite/
+.cache/
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+.nitro/
+.wrangler/
+.output/
+.vinxi/
+__unconfig*
+
+# Tests, couverture et captures automatiques
+coverage/
+playwright-report/
+test-results/
+blob-report/
+
+# Journaux et fichiers temporaires
+*.log
+*.pid
+todos.json
+
+# Réglages locaux d'IDE et fichiers système
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# package-lock.json, src/routeTree.gen.ts et les réglages VS Code partagés
+# restent versionnés.

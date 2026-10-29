@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: Miniapp-database
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    
+    ports:
+      - ${POSTGRES_PORT:-5432}:5432
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
+        ]
+
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: Miniapp-mailpit
+
+    ports:
+      - ${MAILPIT_SMTP_PORT:-1025}:1025
+      - ${MAILPIT_WEB_PORT:-8025}:8025
+
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    container_name: Miniapp-redis
+
+    command: redis-server --appendonly yes
+
+    ports:
+      - ${REDIS_PORT:-6379}:6379
+
+    volumes:
+      - redis_data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    name: Miniapp-database-data
+  redis_data:
+    name: Miniapp-redis-data
