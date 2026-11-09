@@ -125,6 +125,11 @@ class EntityTypeService:
         validate_catalog({**previous, str(entity_type_id): candidate}, previous)
         if requires_data_migration(entity_type.configuration, candidate) and await self.repository.has_records(organization_id, entity_type_id):
             raise ConfigurationError("Cette modification de structure nécessite une migration des enregistrements existants.")
+        single_choices = {field['id'] for field in entity_type.configuration['fields']
+                          if field['kind'] == 'choice' and not field.get('multiple', False)}
+        for field in candidate['fields']:
+            if field['kind'] == 'choice' and field['id'] in single_choices and field.get('multiple', False):
+                await self.repository.expand_choice_values(organization_id, entity_type_id, field['id'], actor_id)
         entity_type.configuration = candidate
         entity_type.configuration_version += 1
         entity_type.updated_by = actor_id

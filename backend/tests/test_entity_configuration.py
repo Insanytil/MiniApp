@@ -266,6 +266,16 @@ class ConfigurationTests(unittest.TestCase):
         changed['fields'].pop()
         self.assertTrue(rules['requires_data_migration'](old, changed))
 
+    def test_choice_can_expand_but_cannot_lose_values_or_options(self):
+        single = copy.deepcopy(self.catalog[self.person])
+        single['fields'][0].update(kind='choice', options=[{'id': 'option'}])
+        multiple = copy.deepcopy(single)
+        multiple['fields'][0]['multiple'] = True
+        self.assertFalse(rules['requires_data_migration'](single, multiple))
+        self.assertTrue(rules['requires_data_migration'](multiple, single))
+        multiple['fields'][0]['options'] = []
+        self.assertTrue(rules['requires_data_migration'](single, multiple))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -5,6 +5,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useState } from 'react'
+import { ChoiceBadges } from '@/features/entity-types/components/choice-badges'
 import {
   recordInitials,
   safeImageUrl,
@@ -18,6 +19,7 @@ export function RecordCell({ cell }: { cell?: Cell }) {
   if (!cell) return <span className="text-muted-foreground">—</span>
   if (cell.kind === 'count') return <span>{cell.total}</span>
   if (cell.kind === 'image') return <RecordImage url={cell.image} />
+  if (cell.choice_options) return <ChoiceBadges options={cell.choice_options} />
   if (cell.kind === 'records')
     return (
       <div className="space-y-2">

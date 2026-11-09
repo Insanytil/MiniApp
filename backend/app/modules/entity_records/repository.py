@@ -160,3 +160,17 @@ class EntityRecordRepository:
             await self.db.execute(update(EntityRecord).where(EntityRecord.organization_id == organization_id,
                 EntityRecord.id.in_(affected_records)).values(updated_by=actor_id, updated_at=func.clock_timestamp()))
         await self.db.flush()
+
+    async def delete_record(self, organization_id, record, actor_id, edges):
+        record_id = record.id
+        await self.db.execute(delete(EntityRecordLink).where(
+            EntityRecordLink.organization_id == organization_id,
+            or_(EntityRecordLink.source_record_id == record_id, EntityRecordLink.target_record_id == record_id),
+        ))
+        affected = {uuid.UUID(identity) for _, source, target in edges
+                    for identity in (source, target) if identity != str(record_id)}
+        if affected:
+            await self.db.execute(update(EntityRecord).where(EntityRecord.organization_id == organization_id,
+                EntityRecord.id.in_(affected)).values(updated_by=actor_id, updated_at=func.clock_timestamp()))
+        await self.db.delete(record)
+        await self.db.flush()

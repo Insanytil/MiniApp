@@ -5,9 +5,15 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Eye, Plus, Pencil, MoreHorizontal } from 'lucide-react'
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
+import { Eye, Plus, Pencil, MoreHorizontal, Trash2 } from 'lucide-react'
 import { useAuth } from '@/features/auth'
+import { ChoiceBadges } from '@/features/entity-types/components/choice-badges'
 import { ServerTable } from '@/components/data-table/server-table'
 import type { ServerColumn } from '@/components/data-table/server-table'
 import { lastAvailablePage } from '@/components/data-table/server-pagination'
@@ -22,7 +28,16 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { errorMessage } from '@/lib/api/client'
-import { recordDetailQuery, recordsQuery } from '../records'
+import { deleteRecord, recordDetailQuery, recordsQuery } from '../records'
+import { createRecordError, recordRootKey } from '../creation'
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import type { EntityRecordRow } from '../records'
 import { RecordCreateSheet } from './record-create-sheet'
 import { formatValue, RecordCell, RecordImage } from './record-cell'
@@ -35,15 +50,18 @@ export function EntityRecordsPage({ entityTypeId }: { entityTypeId: string }) {
       key={`${organization.id}/${entityTypeId}`}
       organizationId={organization.id}
       entityTypeId={entityTypeId}
+      canDelete={organization.role === 'organization_admin'}
     />
   ) : null
 }
 function ScopedRecords({
   organizationId,
   entityTypeId,
+  canDelete,
 }: {
   organizationId: string
   entityTypeId: string
+  canDelete: boolean
 }) {
   const list = useServerList()
   const query = useQuery({
@@ -53,6 +71,18 @@ function ScopedRecords({
   const [selected, setSelected] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+  const removal = useMutation({
+    mutationFn: (id: string) => deleteRecord(organizationId, entityTypeId, id),
+    onSuccess: (_, id) => {
+      setDeleting(null)
+      setSelected((current) => (current === id ? null : current))
+      return queryClient.invalidateQueries({
+        queryKey: recordRootKey(organizationId),
+      })
+    },
+  })
   useEffect(() => {
     if (!query.data || query.isPlaceholderData) return
     const max = lastAvailablePage(query.data.pagination.total_pages)
@@ -109,10 +139,16 @@ function ScopedRecords({
             <Pencil />
             Modifier
           </DropdownMenuItem>
+          {canDelete && (
+            <DropdownMenuItem onClick={() => setDeleting(row.id)}>
+              <Trash2 />
+              Supprimer
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     ),
-    [],
+    [canDelete],
   )
   return (
     <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col gap-4 sm:gap-6">
@@ -195,6 +231,53 @@ function ScopedRecords({
           onClose={() => setSelected(null)}
         />
       )}
+      <AlertDialog
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open && !removal.isPending) {
+            setDeleting(null)
+            removal.reset()
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer cette fiche ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette suppression est définitive. Les relations configurées pour
+              bloquer la suppression seront vérifiées.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {removal.isError && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                {createRecordError(removal.error)}
+              </AlertDescription>
+            </Alert>
+          )}
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              disabled={removal.isPending}
+              onClick={() => {
+                setDeleting(null)
+                removal.reset()
+              }}
+            >
+              Annuler
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={removal.isPending || !deleting}
+              onClick={() => {
+                if (deleting) removal.mutate(deleting)
+              }}
+            >
+              {removal.isPending ? 'Suppression…' : 'Supprimer'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -247,7 +330,9 @@ export function DetailSheet({
                     {field.system ? ' · Système' : ''}
                   </dt>
                   <dd className="text-sm whitespace-pre-wrap break-words">
-                    {field.kind === 'image' ? (
+                    {field.choice_options ? (
+                      <ChoiceBadges options={field.choice_options} />
+                    ) : field.kind === 'image' ? (
                       <RecordImage
                         variant="detail"
                         url={
@@ -255,7 +340,10 @@ export function DetailSheet({
                         }
                       />
                     ) : (
-                      formatValue(field.value, field.kind)
+                      formatValue(
+                        field.display_value ?? field.value,
+                        field.kind,
+                      )
                     )}
                   </dd>
                 </div>

@@ -140,6 +140,12 @@ def requires_data_migration(previous, candidate):
     for identity, field in old_fields.items():
         if identity not in fields or fields[identity]['kind'] != field['kind'] or (fields[identity]['required'] and not field['required']):
             return True
+        if field['kind'] == 'choice':
+            updated = fields[identity]
+            if field.get('multiple', False) and not updated.get('multiple', False):
+                return True
+            if {option['id'] for option in field['options']} - {option['id'] for option in updated['options']}:
+                return True
     if any(field['required'] and field['id'] not in old_fields for field in candidate['fields']):
         return True
     old_relations = {relation['id']: relation for relation in previous['relations']}

@@ -34,6 +34,7 @@ import type {
 } from '../configuration'
 import { toTechnicalName } from '../entity-types'
 import { ViewColumnsEditor } from './view-columns-editor'
+import { ChoiceBadges, choiceColorHex } from './choice-badges'
 
 const labels = {
   fields: 'champ',
@@ -46,6 +47,8 @@ interface Draft {
   technical_name: string
   kind: FieldKind
   required: boolean
+  options: NonNullable<FieldDefinition['options']>
+  multiple: boolean
   target_type_ids: string[]
   inverse_name: string
   source_max: 1 | null
@@ -100,6 +103,8 @@ export function DefinitionSheet({
     technical_name: '',
     kind: 'text',
     required: false,
+    options: [],
+    multiple: false,
     target_type_ids: [],
     inverse_name: '',
     source_max: 1,
@@ -128,6 +133,15 @@ export function DefinitionSheet({
           technical_name: d.technical_name,
           kind: d.kind,
           required: d.required,
+          ...(d.kind === 'choice'
+            ? {
+                options: d.options.map((option) => ({
+                  ...option,
+                  name: option.name.trim(),
+                })),
+                multiple: d.multiple,
+              }
+            : {}),
         }
       else if (kind === 'relations')
         definition = {
@@ -306,6 +320,111 @@ export function DefinitionSheet({
                           Stable après création. Les références utilisent un
                           identifiant interne indépendant du nom affiché.
                         </p>
+                      </div>
+                    )}
+                    {kind === 'fields' && draft.kind === 'choice' && (
+                      <div className="space-y-2">
+                        <Check
+                          checked={draft.multiple}
+                          onChange={(multiple) => update({ multiple })}
+                        >
+                          Autoriser plusieurs choix
+                        </Check>
+                        {draft.options.map((option, index) => (
+                          <div
+                            className="flex flex-wrap items-center gap-2"
+                            key={option.id}
+                          >
+                            <Input
+                              aria-label={`Option ${index + 1}`}
+                              className="min-w-32 flex-1"
+                              placeholder={`Option ${index + 1}`}
+                              maxLength={255}
+                              value={option.name}
+                              onChange={(event) =>
+                                update({
+                                  options: draft.options.map((entry) =>
+                                    entry.id === option.id
+                                      ? { ...entry, name: event.target.value }
+                                      : entry,
+                                  ),
+                                })
+                              }
+                            />
+                            <Check
+                              checked={!!option.color}
+                              onChange={(enabled) =>
+                                update({
+                                  options: draft.options.map((entry) =>
+                                    entry.id === option.id
+                                      ? {
+                                          ...entry,
+                                          color: enabled ? '#2563eb' : null,
+                                        }
+                                      : entry,
+                                  ),
+                                })
+                              }
+                            >
+                              Couleur
+                            </Check>
+                            {option.color && (
+                              <Input
+                                type="color"
+                                className="w-12 cursor-pointer p-1"
+                                aria-label={`Couleur de l’option ${index + 1}`}
+                                value={
+                                  choiceColorHex(option.color) ?? '#2563eb'
+                                }
+                                onChange={(event) => {
+                                  const color = event.target.value
+                                  update({
+                                    options: draft.options.map((entry) =>
+                                      entry.id === option.id
+                                        ? { ...entry, color }
+                                        : entry,
+                                    ),
+                                  })
+                                }}
+                              />
+                            )}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() =>
+                                update({
+                                  options: draft.options.filter(
+                                    (entry) => entry.id !== option.id,
+                                  ),
+                                })
+                              }
+                            >
+                              Retirer
+                            </Button>
+                          </div>
+                        ))}
+                        {draft.options.some((option) => option.name.trim()) && (
+                          <ChoiceBadges
+                            options={draft.options.filter((option) =>
+                              option.name.trim(),
+                            )}
+                          />
+                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={draft.options.length >= 100}
+                          onClick={() =>
+                            update({
+                              options: [
+                                ...draft.options,
+                                { id: crypto.randomUUID(), name: '' },
+                              ],
+                            })
+                          }
+                        >
+                          Ajouter une option
+                        </Button>
                       </div>
                     )}
                     {kind === 'fields' && (

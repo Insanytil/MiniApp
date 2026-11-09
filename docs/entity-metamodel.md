@@ -2,7 +2,7 @@
 
 ## Périmètre actuel
 
-Le configurateur définit les champs, relations, profils d’affichage et vues d’un type d’entité. Il est réservé aux administrateurs de l’organisation active. L’onglet Aperçu utilise exclusivement des données fictives en mémoire : aucun enregistrement métier n’est créé. Le menu d’organisation ouvre désormais une page de lecture des enregistrements avec la vue par défaut. La création des enregistrements est disponible depuis ce tableau, avec validation des champs et des relations. La suppression, la gestion des fichiers et les politiques d’accès fines restent à développer.
+Le configurateur définit les champs, relations, profils d’affichage et vues d’un type d’entité. Il est réservé aux administrateurs de l’organisation active. L’onglet Aperçu utilise exclusivement des données fictives en mémoire. Le menu d’organisation ouvre la vue par défaut des enregistrements. Ce tableau donne accès à la création et à l’édition des fiches, ainsi qu’à la suppression pour les administrateurs. La gestion des fichiers et les politiques d’accès fines restent à développer.
 
 ## Définitions et stockage
 
@@ -10,7 +10,108 @@ Chaque `EntityType` possède un document `configuration` JSONB strictement valid
 
 Chaque définition et chaque colonne possède un UUID stable. Les références utilisent ces UUID, jamais un libellé ou un identifiant technique. Les identifiants techniques des champs et relations existants sont immuables et partagent un espace de noms par type. `id`, `created_at`, `updated_at`, `created_by` et `updated_by` sont réservés. Leurs UUID de référence sont dérivés par UUIDv5 du type et de leur nom système.
 
-Les champs proposés sont texte, email, entier, décimal, booléen, date, date/heure et image. Le caractère obligatoire décrit une contrainte que la future couche d’enregistrements devra appliquer. Aucun JavaScript utilisateur n’est exécuté.
+Les champs proposés sont texte, email, entier, décimal, booléen, date, date/heure, image, liste de choix, téléphone et adresse. La création et la modification des fiches appliquent le caractère obligatoire. Aucun JavaScript utilisateur n’est exécuté.
+
+## Diagramme de classes UML
+
+Les classes de définition ci-dessous représentent des objets du document JSON. Les classes de fiche et de lien représentent des lignes PostgreSQL.
+
+```mermaid
+classDiagram
+    class EntityType {
+        UUID id
+        int configuration_version
+        JSONB configuration
+    }
+    class Configuration {
+        int schema_version
+    }
+    class FieldDefinition {
+        UUID id
+        string kind
+        bool required
+    }
+    class RelationDefinition {
+        UUID id
+        UUID[] target_type_ids
+        int source_max
+        int target_max
+        bool required
+        string on_delete
+    }
+    class EntityRecord {
+        UUID id
+        UUID entity_type_id
+        JSONB values
+    }
+    class EntityRecordLink {
+        UUID relation_id
+        UUID source_record_id
+        UUID target_record_id
+    }
+    EntityType "1" *-- "1" Configuration
+    Configuration "1" *-- "0..*" FieldDefinition
+    Configuration "1" *-- "0..*" RelationDefinition
+    RelationDefinition ..> EntityType : cible
+    EntityType "1" <-- "0..*" EntityRecord : type
+    EntityRecordLink ..> RelationDefinition : identifiant de définition
+    EntityRecord "1" <-- "0..*" EntityRecordLink : source
+    EntityRecord "1" <-- "0..*" EntityRecordLink : cible
+```
+
+## Schéma entité-association PostgreSQL
+
+```mermaid
+erDiagram
+    ORGANIZATIONS ||--o{ ENTITY_TYPES : configure
+    ORGANIZATIONS ||--o{ ENTITY_RECORDS : possède
+    ORGANIZATIONS ||--o{ ENTITY_RECORD_LINKS : possède
+    ENTITY_TYPES ||--o{ ENTITY_RECORDS : définit
+    ENTITY_RECORDS ||--o{ ENTITY_RECORD_LINKS : source
+    ENTITY_RECORDS ||--o{ ENTITY_RECORD_LINKS : cible
+    ENTITY_TYPES {
+        uuid id PK
+        uuid organization_id FK
+        jsonb configuration
+        int configuration_version
+    }
+    ENTITY_RECORDS {
+        uuid id PK
+        uuid organization_id FK
+        uuid entity_type_id FK
+        jsonb values
+        timestamptz updated_at
+    }
+    ENTITY_RECORD_LINKS {
+        uuid id PK
+        uuid organization_id FK
+        uuid relation_id
+        uuid source_record_id FK
+        uuid target_record_id FK
+    }
+```
+
+Les clés étrangères composées incluent `organization_id` pour le type d’une fiche et pour chaque extrémité d’un lien. Une contrainte unique couvre le quadruplet organisation, relation, source et cible. `relation_id` pointe vers un UUID dans la configuration JSON de l’entité source. Le service vérifie l’existence de cette définition et la compatibilité des types, car PostgreSQL ne dispose pas d’une clé étrangère vers cet UUID.
+
+Exemple avec un véhicule affecté à une personne
+
+| Emplacement | Donnée persistée |
+| --- | --- |
+| Configuration de Véhicule | Un champ Immatriculation et une définition de relation vers Personne, chacun avec son UUID |
+| Fiche Véhicule | Une ligne avec le type Véhicule et `values` contenant une entrée UUID du champ → valeur `1-ABC-123` |
+| Fiche Personne | Une autre ligne avec le type Personne et ses propres valeurs |
+| Lien | Une ligne contenant l’UUID de la relation, l’UUID de la fiche Véhicule comme source et l’UUID de la fiche Personne comme cible |
+
+La vue inverse Personne → Véhicules lit les mêmes lignes de lien par leur cible. Renommer un champ ou une relation conserve son UUID et laisse les valeurs et les liens en place.
+
+## Ajouter un type de champ
+
+1. Déclarer le type dans `FieldDefinition.kind`, dans `backend/app/modules/entity_types/configuration_schema.py`.
+2. Ajouter son validateur dans `backend/app/modules/entity_records/creation.py` et le référencer dans la table utilisée par `field_value`. Ce point d’entrée est partagé par la création et l’édition. Le validateur retourne la représentation JSON canonique.
+3. Vérifier les règles de représentation et de projection, puis adapter le configurateur, les formulaires et l’affichage frontend. Une valeur structurée comme un objet ou une liste exige une décision explicite sur son rendu.
+4. Tester la validation et le stockage. Un nouveau type de champ optionnel dont la valeur tient dans JSONB ne demande aucune migration SQL. Convertir un champ existant ou rendre un champ obligatoire sur des fiches déjà présentes demande une migration des données métier. Le service bloque ces changements tant qu’elle n’est pas prévue.
+
+JSONB rend l’ajout de types simple pour les valeurs scalaires. Un champ avec ses propres droits, des contraintes d’unicité ou des recherches spécialisées peut demander des index ou des tables supplémentaires. Les références vers d’autres fiches utilisent le modèle relationnel existant.
 
 ## Une relation, deux navigations
 
@@ -25,7 +126,21 @@ Les deux maximums définissent les cardinalités :
 
 Ainsi, Véhicule → Personne avec `source_max=1`, `target_max=null` est une relation plusieurs-vers-un. Personne obtient automatiquement la navigation inverse Véhicules. Une relation à soi-même donne deux navigations distinctes et compte une seule fois dans le compteur de relations.
 
-Les relations portent aussi une obligation côté source et une politique de suppression `restrict` ou `unlink`. Une relation obligatoire ne peut pas autoriser `unlink`. Ces options décrivent le contrat à appliquer lors de la future gestion des liens entre enregistrements. L’héritage ne se confond pas avec une relation et n’est pas introduit par ce document.
+Les relations portent une obligation côté source et une politique de suppression `restrict` ou `unlink`. La création et l’édition valident les types des fiches sélectionnées, l’obligation et les cardinalités dans les deux directions. Lors d’une édition depuis la cible, le service empêche aussi de retirer le dernier lien obligatoire d’une fiche source. Les validations et les écritures partagent un verrou par organisation, qui protège les cardinalités contre deux écritures concurrentes passant par le service.
+
+Un administrateur peut supprimer une fiche depuis le menu d’actions du tableau. Pour les liens entrants depuis une fiche conservée, `restrict` bloque la suppression et `unlink` retire le lien. Les liens sortants et les liens de la fiche vers elle-même sont retirés avec la fiche. Le backend met à jour la version temporelle des fiches touchées dans la même transaction.
+
+### Relations dans les vues frontend
+
+Dans **Vues → Ajouter des colonnes**, le frontend dérive les navigations entrantes et sortantes à partir du catalogue de l’organisation, disponible à `GET /organization/entity-types/configuration/catalog`. Il enregistre l’UUID de relation et sa direction dans la colonne. Une colonne peut afficher un compteur ou les fiches liées avec leur profil d’affichage. Pour les choix de présentation, le frontend connaît le nom de la navigation, les types liés et la cardinalité.
+
+Le tableau charge `GET /organization/entities/{type_id}/records`, avec `view_id` facultatif pour demander une vue enregistrée précise. Le backend renvoie les cellules déjà projetées, avec `total` pour chaque relation et jusqu’à trois fiches présentées. Le frontend affiche directement ces cellules. Le catalogue fournit les métadonnées utiles à la construction de la vue et le tableau fournit les données métier. L’aperçu du configurateur utilise des exemples fictifs.
+
+### Liste de choix, téléphone et adresse
+
+Une liste stocke ses options avec des UUID stables. Un choix unique stocke un UUID, et un choix multiple stocke un tableau d’UUID. Les tableaux, les fiches et les profils résolvent ces identifiants vers les libellés. Renommer ou ajouter une option conserve les sélections. En passant du choix unique au choix multiple, l’enregistrement de la configuration convertit chaque UUID existant en tableau d’un élément dans la même transaction. Revenir au choix unique ou retirer une option sur un type contenant des fiches demande une migration des valeurs.
+
+Le numéro de téléphone est stocké en texte et conserve son format de saisie. L’adresse est stockée en texte multiligne. Ces champs utilisent le stockage JSONB existant.
 
 ## Représentations et vues
 

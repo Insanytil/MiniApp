@@ -1,5 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import type { ChoiceOption } from '@/features/entity-types/configuration'
 import { organizationQueryKey } from '@/features/organizations/selection'
 import { listSearchParams } from '@/components/data-table/server-pagination'
 import type {
@@ -21,6 +22,7 @@ export interface RecordCell {
   field_kind: string | null
   items: PresentedRecord[]
   total: number
+  choice_options?: ChoiceOption[] | null
 }
 export interface EntityRecordRow {
   id: string
@@ -44,6 +46,8 @@ export interface RecordDetail {
     kind: string
     system?: boolean
     value: unknown
+    display_value?: string
+    choice_options?: ChoiceOption[]
   }[]
 }
 export const recordsKey = (organizationId: string, typeId: string) =>
@@ -74,6 +78,17 @@ export const recordDetailQuery = (
         { signal, organizationId, organizationScoped: true },
       ),
   })
+
+export function deleteRecord(
+  organizationId: string,
+  typeId: string,
+  recordId: string,
+) {
+  return api.request<void>(
+    `/organization/entities/${encodeURIComponent(typeId)}/records/${encodeURIComponent(recordId)}`,
+    { method: 'DELETE', organizationId, organizationScoped: true },
+  )
+}
 
 export function formatValue(value: unknown, kind?: string | null): string {
   if (value === null || value === undefined || value === '') return '—'

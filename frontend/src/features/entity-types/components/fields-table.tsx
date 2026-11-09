@@ -45,6 +45,9 @@ const symbols: Record<FieldKind, string> = {
   date: 'Date',
   datetime: 'Date',
   image: 'Img',
+  choice: 'Liste',
+  phone: 'Tél.',
+  address: 'Adr.',
 }
 const searchable = (value: string) =>
   value

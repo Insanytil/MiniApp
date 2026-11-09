@@ -32,6 +32,35 @@ def field(kind='text', required=False):
 
 
 class ValueTests(unittest.TestCase):
+    def test_choice_validates_option_ids_and_cardinality(self):
+        option_id = str(uuid.uuid4())
+        definition = {**field('choice', True), 'options': [{'id': option_id, 'name': 'Option'}]}
+        validate = creation['field_value']
+        self.assertEqual(validate(definition, option_id), option_id)
+        with self.assertRaises(ValueError):
+            validate(definition, [option_id])
+        definition['multiple'] = True
+        self.assertEqual(validate(definition, [option_id]), [option_id])
+        for invalid in ([], [option_id, option_id], [str(uuid.uuid4())], option_id):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                validate(definition, invalid)
+
+    def test_phone_and_multiline_address_are_preserved_as_text(self):
+        validate = creation['field_value']
+        self.assertEqual(validate(field('phone'), ' +32 (0)2 123 45 67 '), '+32 (0)2 123 45 67')
+        with self.assertRaises(ValueError):
+            validate(field('phone'), 'abc')
+        self.assertEqual(validate(field('address'), ' Rue Exemple 12\n1000 Bruxelles '),
+                         'Rue Exemple 12\n1000 Bruxelles')
+
+    def test_datetime_outside_utc_range_is_reported_as_a_field_error(self):
+        definition = field('datetime')
+        with self.assertRaises(creation['RecordValidationError']) as error:
+            creation['validate_values'](
+                [definition], {definition['id']: '0001-01-01T00:00:00+01:00'}
+            )
+        self.assertEqual(error.exception.issues[0]['field'], definition['id'])
+
     def test_required_values_and_unknown_or_system_fields_are_rejected(self):
         definition = field(required=True)
         for value in (None, '', '  '):

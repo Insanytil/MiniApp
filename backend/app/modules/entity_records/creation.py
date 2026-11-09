@@ -24,50 +24,112 @@ class RecordRelationConflictError(RecordValidationError):
     pass
 
 
+def _text(value, limit=10000):
+    if not isinstance(value, str):
+        raise ValueError('Une valeur textuelle est attendue.')
+    value = value.strip()
+    if len(value) > limit:
+        raise ValueError(f'{limit} caractères maximum.')
+    return value
+
+
+def _email(value):
+    value = _text(value, 320)
+    if not EMAIL.fullmatch(value):
+        raise ValueError('Adresse e-mail invalide.')
+    return value
+
+
+def _image(value):
+    value = _text(value, 2048)
+    if not safe_image(value):
+        raise ValueError('Utilisez une URL HTTPS ou un chemin d’image de l’application.')
+    return value
+
+
+def _date(value):
+    value = _text(value, 100)
+    try:
+        if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', value):
+            raise ValueError()
+        return date.fromisoformat(value).isoformat()
+    except ValueError:
+        raise ValueError('Date invalide.') from None
+
+
+def _datetime(value):
+    value = _text(value, 100)
+    try:
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        if 'T' not in value or parsed.utcoffset() is None:
+            raise ValueError()
+        return parsed.astimezone(timezone.utc).isoformat()
+    except (ValueError, OverflowError):
+        raise ValueError('Date et heure invalides ; le fuseau horaire est requis.') from None
+
+
+def _boolean(value):
+    if type(value) is not bool:
+        raise ValueError('Choisissez Oui ou Non.')
+    return value
+
+
+def _integer(value):
+    if type(value) is not int or abs(value) > MAX_NUMBER:
+        raise ValueError('Un entier représentable sans perte de précision est attendu.')
+    return value
+
+
+def _decimal(value):
+    if type(value) not in (int, float) or abs(value) > MAX_NUMBER or not math.isfinite(value):
+        raise ValueError('Un nombre fini représentable sans perte de précision est attendu.')
+    return value
+
+
 def field_value(field, value):
-    if value is None or (isinstance(value, str) and not value.strip()):
+    if value is None or (isinstance(value, str) and not value.strip()) or (
+        field['kind'] == 'choice' and field.get('multiple') and value == []
+    ):
         if field['required']:
             raise ValueError('Ce champ est obligatoire.')
         return None
-    kind = field['kind']
-    if kind in ('text', 'email', 'image', 'date', 'datetime'):
-        if not isinstance(value, str):
-            raise ValueError('Une valeur textuelle est attendue.')
-        value = value.strip()
-        limit = 10000 if kind == 'text' else 320 if kind == 'email' else 2048 if kind == 'image' else 100
-        if len(value) > limit:
-            raise ValueError(f'{limit} caractères maximum.')
-        if kind == 'email' and not EMAIL.fullmatch(value):
-            raise ValueError('Adresse e-mail invalide.')
-        if kind == 'image' and not safe_image(value):
-            raise ValueError('Utilisez une URL HTTPS ou un chemin d’image de l’application.')
-        if kind == 'date':
-            try:
-                if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', value): raise ValueError()
-                value = date.fromisoformat(value).isoformat()
-            except ValueError:
-                raise ValueError('Date invalide.') from None
-        if kind == 'datetime':
-            try:
-                parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
-                if 'T' not in value or parsed.tzinfo is None or parsed.utcoffset() is None: raise ValueError()
-                value = parsed.astimezone(timezone.utc).isoformat()
-            except ValueError:
-                raise ValueError('Date et heure invalides ; le fuseau horaire est requis.') from None
-        return value
-    if kind == 'boolean':
-        if type(value) is not bool:
-            raise ValueError('Choisissez Oui ou Non.')
-        return value
-    if kind == 'integer':
-        if type(value) is not int or abs(value) > MAX_NUMBER:
-            raise ValueError('Un entier représentable sans perte de précision est attendu.')
-        return value
-    if kind == 'decimal':
-        if type(value) not in (int, float) or abs(value) > MAX_NUMBER or not math.isfinite(value):
-            raise ValueError('Un nombre fini représentable sans perte de précision est attendu.')
-        return value
-    raise ValueError('Type de champ non pris en charge.')
+    if field['kind'] == 'choice':
+        multiple = field.get('multiple', False)
+        selections = value if multiple else [value]
+        allowed = {option['id'] for option in field['options']}
+        if not isinstance(selections, list) or any(
+            not isinstance(selection, str) or selection not in allowed for selection in selections
+        ) or len(set(selections)) != len(selections):
+            raise ValueError('Sélectionnez des options valides et distinctes.')
+        return selections if multiple else value
+    validators = {
+        'text': _text,
+        'email': _email,
+        'image': _image,
+        'date': _date,
+        'datetime': _datetime,
+        'boolean': _boolean,
+        'integer': _integer,
+        'decimal': _decimal,
+        'phone': _phone,
+        'address': _address,
+    }
+    validator = validators.get(field['kind'])
+    if validator is None:
+        raise ValueError('Type de champ non pris en charge.')
+    return validator(value)
+
+
+def _phone(value):
+    value = _text(value, 40)
+    digits = sum(character.isascii() and character.isdigit() for character in value)
+    if not re.fullmatch(r'\+?[0-9 ().-]+', value) or not 3 <= digits <= 15:
+        raise ValueError('Saisissez un numéro de téléphone valide.')
+    return value
+
+
+def _address(value):
+    return _text(value, 1000)
 
 
 def validate_values(fields, supplied):

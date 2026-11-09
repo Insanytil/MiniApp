@@ -40,17 +40,22 @@ export function ConfigurationPreview({
         values[item.id]?.[field.id] ??
           (field.kind === 'image'
             ? ''
-            : field.kind === 'decimal'
-              ? '1250.00'
-              : field.kind === 'integer'
-                ? '2'
-                : field.kind === 'boolean'
-                  ? 'true'
-                  : field.kind === 'date'
-                    ? '2026-10-28'
-                    : field.kind === 'datetime'
-                      ? '2026-10-28T10:30:00'
-                      : field.name),
+            : field.kind === 'choice'
+              ? (field.options ?? [])
+                  .slice(0, field.multiple ? 2 : 1)
+                  .map((option) => option.name)
+                  .join(', ')
+              : field.kind === 'decimal'
+                ? '1250.00'
+                : field.kind === 'integer'
+                  ? '2'
+                  : field.kind === 'boolean'
+                    ? 'true'
+                    : field.kind === 'date'
+                      ? '2026-10-28'
+                      : field.kind === 'datetime'
+                        ? '2026-10-28T10:30:00'
+                        : field.name),
       ]),
     )
   const profile =

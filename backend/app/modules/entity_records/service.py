@@ -3,10 +3,10 @@ import uuid
 from sqlalchemy.exc import IntegrityError
 from app.modules.entity_types.configuration_rules import relation_catalog
 from app.modules.entity_records.creation import (
-    RecordValidationError, RecordSchemaConflictError, creation_relations,
+    RecordValidationError, RecordSchemaConflictError, RecordRelationConflictError, creation_relations,
     validate_values, validate_assignments, check_capacity,
 )
-from app.modules.entity_records.presentation import present_record
+from app.modules.entity_records.presentation import field_text, present_record, selected_options
 
 from app.modules.entity_types.configuration_rules import all_fields, navigations
 from app.modules.entity_types.definitions import EntityTypeNotFoundError
@@ -53,7 +53,39 @@ class EntityRecordService:
             raise EntityRecordNotFoundError()
         values = record_values(record)
         return {'id': record.id, 'entity_type_name': entity_type.name,
-                'fields': [{**field, 'value': values.get(field['id'])} for field in all_fields(entity_type.id, entity_type.configuration)]}
+                'fields': [{**field, 'value': values.get(field['id']),
+                            **({'display_value': field_text(field, values.get(field['id'])),
+                                'choice_options': selected_options(field, values.get(field['id']))}
+                               if field['kind'] == 'choice' else {})}
+                           for field in all_fields(entity_type.id, entity_type.configuration)]}
+
+    async def delete(self, organization_id, entity_type_id, record_id, actor_id):
+        await self.repository.lock_writes(organization_id)
+        record = await self.repository.get_record(organization_id, entity_type_id, record_id)
+        if record is None:
+            raise EntityRecordNotFoundError()
+        edges = await self.repository.record_edges(organization_id, record_id)
+        if edges:
+            catalog = {str(item.id): item.configuration for item in await self.repository.catalog(organization_id)}
+            definitions = relation_catalog(catalog)
+            for relation_id, source_id, target_id in edges:
+                if target_id != str(record_id) or source_id == str(record_id):
+                    continue
+                definition = definitions.get(relation_id)
+                if definition is None or definition[1]['on_delete'] != 'unlink' or definition[1]['required']:
+                    name = definition[1]['inverse_name'] if definition else 'Relation inconnue'
+                    raise RecordRelationConflictError([{'field': None,
+                        'message': f'La relation « {name} » bloque la suppression. Retirez les liens concernés avant de réessayer.'}])
+        try:
+            await self.repository.delete_record(organization_id, record, actor_id, edges)
+            await self.repository.commit()
+        except IntegrityError:
+            await self.repository.rollback()
+            raise RecordRelationConflictError([{'field': None,
+                'message': 'Une référence empêche la suppression de cette fiche.'}]) from None
+        except Exception:
+            await self.repository.rollback()
+            raise
 
 
     async def creation_schema(self, organization_id, entity_type_id):

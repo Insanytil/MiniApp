@@ -29,13 +29,13 @@ export interface CreationSchema {
   selections?: Record<string, AsyncOption[]>
 }
 export interface CreationDraft {
-  values: Record<string, string>
+  values: Record<string, string | string[]>
   relations: Record<string, AsyncOption[]>
 }
 export interface CreateRecordPayload {
   expected_configuration_version: number
   expected_updated_at?: string
-  values: Record<string, string | number | boolean>
+  values: Record<string, string | number | boolean | string[]>
   relations: {
     relation_id: string
     direction: 'outgoing' | 'incoming'
@@ -86,7 +86,11 @@ export function updateRecord(
     { method: 'PUT', organizationId, organizationScoped: true, body: payload },
   )
 }
-function inputValue(field: FieldDefinition, value: unknown): string {
+function inputValue(field: FieldDefinition, value: unknown): string | string[] {
+  if (field.kind === 'choice' && field.multiple)
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === 'string')
+      : []
   if (value === null || value === undefined) return ''
   if (field.kind === 'datetime' && typeof value === 'string') {
     const date = new Date(value)
@@ -120,7 +124,23 @@ export function buildRecordPayload(
   const errors: Record<string, string> = {}
   const values: CreateRecordPayload['values'] = {}
   for (const field of schema.fields) {
-    const raw = (draft.values[field.id] ?? '').trim()
+    const input = draft.values[field.id]
+    if (field.kind === 'choice') {
+      const selection = field.multiple
+        ? Array.isArray(input)
+          ? input
+          : []
+        : typeof input === 'string'
+          ? input
+          : ''
+      if (!selection.length) {
+        if (field.required) errors[field.id] = 'Ce champ est obligatoire.'
+      } else {
+        values[field.id] = selection
+      }
+      continue
+    }
+    const raw = typeof input === 'string' ? input.trim() : ''
     if (!raw) {
       if (field.required) errors[field.id] = 'Ce champ est obligatoire.'
       continue

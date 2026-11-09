@@ -1,8 +1,8 @@
 """Versioned, declarative metadata. References use UUIDs, never display names."""
 import uuid
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.modules.entity_types.definitions import normalize_name, validate_technical_name
 
@@ -18,10 +18,32 @@ class Definition(BaseModel):
         return normalize_name(value)
 
 
+class ChoiceOption(Definition):
+    color: Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")] | Literal[
+        "blue", "green", "amber", "red", "purple", "pink"
+    ] | None = None
+
+
 class FieldDefinition(Definition):
     technical_name: str = Field(min_length=1, max_length=100)
-    kind: Literal["text", "email", "integer", "decimal", "boolean", "date", "datetime", "image"]
+    kind: Literal["text", "email", "integer", "decimal", "boolean", "date", "datetime", "image", "choice", "phone", "address"]
     required: bool = False
+    options: list[ChoiceOption] = Field(default_factory=list, max_length=100)
+    multiple: bool = False
+
+    @model_validator(mode="after")
+    def validate_options(self):
+        if self.kind != "choice":
+            if self.options or self.multiple:
+                raise ValueError("Les options sont réservées aux listes de choix.")
+            return self
+        if not self.options:
+            raise ValueError("Ajoutez au moins une option.")
+        if len({option.id for option in self.options}) != len(self.options):
+            raise ValueError("Les identifiants d’option doivent être uniques.")
+        if len({option.name.casefold() for option in self.options}) != len(self.options):
+            raise ValueError("Les libellés d’option doivent être uniques.")
+        return self
 
     @field_validator("technical_name")
     @classmethod

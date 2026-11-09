@@ -399,10 +399,10 @@ export function ScalarInput({
   inputId?: string
   compact?: boolean
   field: FieldDefinition
-  value: string
+  value: string | string[]
   error?: string
   disabled: boolean
-  onChange: (value: string) => void
+  onChange: (value: string | string[]) => void
   onBlur: () => void
 }) {
   const id = inputId ?? `new-record-${field.id}`
@@ -414,7 +414,7 @@ export function ScalarInput({
   const common = {
     id,
     disabled,
-    value,
+    value: typeof value === 'string' ? value : '',
     onBlur,
     'aria-invalid': !!error,
     'aria-describedby': describedBy,
@@ -427,7 +427,49 @@ export function ScalarInput({
           <span className="text-muted-foreground"> (obligatoire)</span>
         )}
       </Label>
-      {field.kind === 'boolean' ? (
+      {field.kind === 'choice' && field.multiple ? (
+        <fieldset
+          id={id}
+          disabled={disabled}
+          aria-label={field.name}
+          aria-describedby={describedBy}
+          className="max-h-44 space-y-1 overflow-auto rounded-md border p-2"
+        >
+          {field.options?.map((option) => {
+            const selected = Array.isArray(value) ? value : []
+            return (
+              <label key={option.id} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(option.id)}
+                  onBlur={onBlur}
+                  onChange={(event) =>
+                    onChange(
+                      event.target.checked
+                        ? [...selected, option.id]
+                        : selected.filter((item) => item !== option.id),
+                    )
+                  }
+                />
+                {option.name}
+              </label>
+            )
+          })}
+        </fieldset>
+      ) : field.kind === 'choice' ? (
+        <NativeSelect
+          {...common}
+          className="w-full"
+          onChange={(event) => onChange(event.target.value)}
+        >
+          <NativeSelectOption value="">Non renseigné</NativeSelectOption>
+          {field.options?.map((option) => (
+            <NativeSelectOption key={option.id} value={option.id}>
+              {option.name}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      ) : field.kind === 'boolean' ? (
         <NativeSelect
           {...common}
           className="w-full"
@@ -437,12 +479,12 @@ export function ScalarInput({
           <NativeSelectOption value="true">Oui</NativeSelectOption>
           <NativeSelectOption value="false">Non</NativeSelectOption>
         </NativeSelect>
-      ) : field.kind === 'text' ? (
+      ) : field.kind === 'text' || field.kind === 'address' ? (
         <Textarea
           {...common}
           rows={compact ? 1 : 2}
           className={compact ? 'min-h-9' : undefined}
-          maxLength={10000}
+          maxLength={field.kind === 'address' ? 1000 : 10000}
           onChange={(event) => onChange(event.target.value)}
         />
       ) : (
@@ -464,7 +506,9 @@ export function ScalarInput({
                   ? 'date'
                   : field.kind === 'email'
                     ? 'email'
-                    : 'text'
+                    : field.kind === 'phone'
+                      ? 'tel'
+                      : 'text'
           }
           step={
             field.kind === 'decimal'
@@ -488,7 +532,9 @@ export function ScalarInput({
           <p id={`${id}-hint`} className="text-xs text-muted-foreground">
             URL HTTPS ou chemin d’une image de l’application.
           </p>
-          {value.trim() && <RecordImage url={value.trim()} variant="detail" />}
+          {common.value.trim() && (
+            <RecordImage url={common.value.trim()} variant="detail" />
+          )}
         </div>
       )}
       {error && (

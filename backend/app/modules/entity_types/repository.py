@@ -1,6 +1,7 @@
 import uuid
 
-from sqlalchemy import String, func, or_, select, type_coerce, exists
+from sqlalchemy import String, Text, func, literal, or_, select, type_coerce, exists, update
+from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.entity_type import EntityType
@@ -74,6 +75,20 @@ class EntityTypeRepository:
         return bool(await self.db.scalar(select(exists().where(
             EntityRecord.organization_id == organization_id, EntityRecord.entity_type_id == entity_type_id,
         ))))
+
+    async def expand_choice_values(self, organization_id, entity_type_id, field_id, actor_id):
+        key = literal(field_id, type_=Text)
+        value = EntityRecord.values.op('->')(key)
+        await self.db.execute(update(EntityRecord).where(
+            EntityRecord.organization_id == organization_id,
+            EntityRecord.entity_type_id == entity_type_id,
+            func.jsonb_typeof(value) == 'string',
+        ).values(
+            values=func.jsonb_set(EntityRecord.values, array([key], type_=Text),
+                                  func.jsonb_build_array(value), False),
+            updated_by=actor_id,
+            updated_at=func.clock_timestamp(),
+        ))
 
     async def used_in_menu(self, organization_id, entity_type_id):
         document = await self.db.scalar(select(Organization.navigation).where(Organization.id == organization_id))

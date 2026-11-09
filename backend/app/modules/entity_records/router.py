@@ -9,10 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.pagination import PagePaginationParams, PagePaginationMeta
 from app.db.session import get_async_session
-from app.modules.authorisation.dependencies import CurrentOrganizationScope
+from app.modules.authorisation.dependencies import CurrentOrganizationScope, OrganizationAdminScope
 from app.modules.entity_records.repository import EntityRecordRepository
 from app.modules.entity_records.service import EntityRecordService, EntityRecordNotFoundError
 from app.modules.entity_types.definitions import EntityTypeNotFoundError
+from app.modules.entity_types.configuration_schema import ChoiceOption
 from app.modules.entity_records.creation import RecordValidationError, RecordSchemaConflictError, RecordRelationConflictError
 from app.modules.entity_records.creation_schema import CreateRecordRequest, RecordCreatedResponse, RecordCreationSchema, UpdateRecordRequest, RecordEditSchema
 
@@ -20,6 +21,10 @@ from app.modules.entity_records.creation_schema import CreateRecordRequest, Reco
 class RecordListParams(PagePaginationParams):
     model_config = ConfigDict(extra='forbid')
     search: str | None = Field(default=None, max_length=255)
+
+
+class RecordTableParams(RecordListParams):
+    view_id: uuid.UUID | None = None
 
 
 class RecordPresentation(BaseModel):
@@ -37,6 +42,7 @@ class RecordCell(BaseModel):
     field_kind: str | None = None
     items: list[RecordPresentation] = Field(default_factory=list)
     total: int = 0
+    choice_options: list[ChoiceOption] | None = None
 
 
 class RecordRow(BaseModel):
@@ -59,8 +65,19 @@ Service = Annotated[EntityRecordService, Depends(get_service)]
 router = APIRouter(prefix='/organization/entities', tags=['entity records'])
 
 
+@router.delete('/{entity_type_id}/records/{record_id}', status_code=204)
+async def delete_record(entity_type_id: uuid.UUID, record_id: uuid.UUID,
+                        scope: OrganizationAdminScope, service: Service):
+    try:
+        await service.delete(scope.organization.id, entity_type_id, record_id, scope.user.id)
+    except EntityRecordNotFoundError:
+        raise HTTPException(status_code=404, detail='Entity record not found') from None
+    except RecordRelationConflictError as exc:
+        return JSONResponse(status_code=409, content={'detail': str(exc), 'errors': exc.issues})
+
+
 @router.get('/{entity_type_id}/records', response_model=RecordTableResponse)
-async def list_records(entity_type_id: uuid.UUID, params: Annotated[RecordListParams, Query()],
+async def list_records(entity_type_id: uuid.UUID, params: Annotated[RecordTableParams, Query()],
                        scope: CurrentOrganizationScope, service: Service):
     try:
         return await service.list_records(scope.organization.id, entity_type_id, params)

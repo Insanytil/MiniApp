@@ -14,14 +14,24 @@ export const fieldKinds = {
   date: 'Date',
   datetime: 'Date et heure',
   image: 'Image',
+  choice: 'Liste de choix',
+  phone: 'Téléphone',
+  address: 'Adresse',
 } as const
 export type FieldKind = keyof typeof fieldKinds
+export interface ChoiceOption {
+  id: string
+  name: string
+  color?: string | null
+}
 export interface FieldDefinition {
   id: string
   name: string
   technical_name: string
   kind: FieldKind
   required: boolean
+  options?: ChoiceOption[]
+  multiple?: boolean
   system?: boolean
 }
 export interface RelationDefinition {
@@ -217,6 +227,17 @@ export function definitionError(
       return 'Choisissez l’entité liée et nommez la relation inverse.'
     if (relation.required && relation.on_delete === 'unlink')
       return 'Une relation obligatoire doit empêcher la suppression de l’enregistrement lié.'
+  }
+  if (kind === 'fields') {
+    const field = item as FieldDefinition
+    if (field.kind === 'choice') {
+      const names =
+        field.options?.map((option) => option.name.trim().toLowerCase()) ?? []
+      if (!names.length || names.length > 100 || names.some((name) => !name))
+        return 'Renseignez entre 1 et 100 options.'
+      if (new Set(names).size !== names.length)
+        return 'Chaque option doit avoir un libellé distinct.'
+    }
   }
   if (
     kind === 'display_profiles' &&

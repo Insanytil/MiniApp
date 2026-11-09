@@ -35,13 +35,27 @@ def safe_image(value):
         return None
 
 
+def selected_options(field, value):
+    options = {option['id']: option for option in field['options']}
+    selections = value if isinstance(value, list) else [value]
+    return [options.get(item, {'id': item, 'name': item}) for item in selections if isinstance(item, str)]
+
+
+def field_text(field, value):
+    if field and field['kind'] == 'choice':
+        return ', '.join(option['name'] for option in selected_options(field, value))
+    return scalar_text(value)
+
+
 def present_record(record, entity_type, profile_id=None):
     profiles = entity_type.configuration['display_profiles']
     profile = next((p for p in profiles if p['id'] == profile_id), None) if profile_id else None
     profile = profile or next((p for p in profiles if p['is_default']), None)
     values = record_values(record)
+    fields = {field['id']: field for field in entity_type.configuration['fields']}
     def compose(ids):
-        return profile['separator'].join(text for identity in ids if (text := scalar_text(values.get(identity))))
+        return profile['separator'].join(text for identity in ids
+            if (text := field_text(fields.get(identity), values.get(identity))))
     title = compose(profile['title_fields']) if profile else ''
     return {
         'id': str(record.id), 'entity_type_id': str(record.entity_type_id),
@@ -75,7 +89,9 @@ def project_rows(records, entity_type, view, catalog, paths, link_groups, relate
                 field = fields.get(column['field_id'])
                 value = values.get(column['field_id'])
                 cells[column['id']] = {'kind': 'image', 'image': safe_image(value)} if field and field['kind'] == 'image' else {
-                    'kind': 'text', 'text': scalar_text(value) or '—', 'field_kind': field['kind'] if field else 'text'}
+                    'kind': 'text', 'text': field_text(field, value) or '—', 'field_kind': field['kind'] if field else 'text'}
+                if field and field['kind'] == 'choice':
+                    cells[column['id']]['choice_options'] = selected_options(field, value)
             elif kind == 'display':
                 cells[column['id']] = {'kind': 'records', 'items': [present_record(record, entity_type, column['profile_id'])], 'total': 1}
             else:
