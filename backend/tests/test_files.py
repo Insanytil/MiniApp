@@ -6,7 +6,8 @@ import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from pydantic import ValidationError
-from app.modules.files.schemas import UploadRequest
+from app.modules.files.schemas import UploadRequest, FileNameRequest
+from app.modules.files.repository import FileRepository
 
 HAS_BOTO3 = importlib.util.find_spec("boto3") is not None
 if HAS_BOTO3:
@@ -28,6 +29,52 @@ class FileValidationTests(unittest.TestCase):
 
     def test_preserves_unicode_filename(self):
         self.assertEqual(UploadRequest(filename=" été.png ", size_bytes=1).filename, "été.png")
+
+
+class FileLibraryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_library_filters_scoped_ready_images_and_escapes_search(self):
+        org = uuid.uuid4()
+        db = SimpleNamespace(scalars=AsyncMock(return_value=SimpleNamespace(all=lambda: [])))
+        await FileRepository(db).list_ready(org, offset=18, limit=19, search=' Photo_100% ', images_only=True)
+        query = db.scalars.await_args.args[0]
+        sql = str(query)
+        params = query.compile().params
+        self.assertIn('stored_files.organization_id =', sql)
+        self.assertIn('stored_files.state =', sql)
+        self.assertIn('stored_files.content_type IN', sql)
+        self.assertIn('lower(stored_files.filename)', sql)
+        self.assertIn(org, params.values())
+        self.assertIn('ready', params.values())
+        self.assertIn('stored_files.is_selectable IS true', sql)
+        self.assertIn('photo/_100/%', params.values())
+        self.assertIn(18, params.values())
+        self.assertIn(19, params.values())
+
+    async def test_manager_counts_record_usage_with_both_organization_scopes(self):
+        org = uuid.uuid4()
+        db = SimpleNamespace(scalar=AsyncMock(return_value=2),
+            execute=AsyncMock(return_value=SimpleNamespace(all=lambda: [])))
+        _, total = await FileRepository(db).list_managed(org, offset=0, limit=20, linked=False, selectable=False)
+        query = db.execute.await_args.args[0]
+        sql = str(query)
+        self.assertEqual(total, 2)
+        self.assertIn('entity_records.organization_id =', sql)
+        self.assertIn('stored_files.organization_id =', sql)
+        self.assertIn('CAST(stored_files.id AS VARCHAR)', sql)
+        self.assertIn('usage_count', sql)
+        self.assertIn('stored_files.is_selectable IS false', sql)
+        # The EXISTS must correlate to this file, never scan all files again.
+        self.assertEqual(sql.count('FROM stored_files'), 1)
+        self.assertGreaterEqual(list(query.compile().params.values()).count(org), 2)
+
+    async def test_default_listing_keeps_non_image_files_available(self):
+        items = [object()]
+        db = SimpleNamespace(scalars=AsyncMock(return_value=SimpleNamespace(all=lambda: items)))
+        result = await FileRepository(db).list_ready(uuid.uuid4(), offset=0, limit=50)
+        self.assertIs(result, items)
+        query = str(db.scalars.await_args.args[0])
+        self.assertNotIn('stored_files.content_type IN', query)
+        self.assertNotIn('lower(stored_files.filename)', query)
 
 
 @unittest.skipUnless(HAS_BOTO3, "Install declared backend dependencies to run S3 tests")
@@ -92,6 +139,41 @@ class FileAuthorizationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.item.state, 'deleted')
         self.db.commit.assert_awaited_once()
 
+    async def test_unavailable_file_can_still_be_downloaded_and_renamed_without_s3_copy(self):
+        self.item.state = 'ready'
+        self.item.filename = 'before.png'
+        self.storage.download.return_value = 'https://signed.example/file'
+        await self.service.set_availability(self.item.id, self.scope, False)
+        self.assertFalse(self.item.is_selectable)
+        result = await self.service.download_file(self.item.id, self.scope, preview=True)
+        self.assertEqual(result.url, 'https://signed.example/file')
+        await self.service.rename_file(self.item.id, self.scope, 'after.png')
+        self.assertEqual(self.item.filename, 'after.png')
+        self.storage.finalize.assert_not_called()
+        self.storage.delete.assert_not_called()
+
+    async def test_staging_cleanup_happens_only_after_successful_commit(self):
+        events = []
+        self.storage.finalize.side_effect = lambda *args: events.append('copy')
+        self.db.commit.side_effect = lambda: events.append('commit')
+        self.storage.discard_pending.side_effect = lambda *args: events.append('cleanup')
+        await self.service.complete_upload(self.item.id, self.scope)
+        self.assertEqual(events, ['copy', 'commit', 'cleanup'])
+
+    async def test_failed_commit_keeps_staging_available_for_retry(self):
+        self.db.commit.side_effect = RuntimeError('database unavailable')
+        with self.assertRaises(RuntimeError):
+            await self.service.complete_upload(self.item.id, self.scope)
+        self.storage.discard_pending.assert_not_called()
+
+    async def test_cleanup_failure_does_not_reject_completed_upload(self):
+        self.storage.discard_pending.side_effect = FileError(503, 'File storage unavailable')
+        with self.assertLogs('app.modules.files.service', level='WARNING'):
+            result = await self.service.complete_upload(self.item.id, self.scope)
+        self.assertIs(result, self.item)
+        self.assertEqual(result.state, 'ready')
+        self.db.commit.assert_awaited_once()
+
     async def test_storage_failure_does_not_mark_ready(self):
         self.storage.finalize.side_effect = ValueError("mismatch")
         with self.assertRaises(FileError):
@@ -121,6 +203,11 @@ class S3SigningTests(unittest.TestCase):
         self.assertEqual(params["CopySourceIfMatch"], "etag")
         self.assertEqual(params["Key"], "key")
         self.assertEqual(params["CopySource"]["Key"], "pending/key")
+
+    def test_staging_cleanup_does_not_delete_the_published_object(self):
+        self.storage.discard_pending('organizations/org/key')
+        self.storage.client.delete_object.assert_called_once()
+        self.assertEqual(self.storage.client.delete_object.call_args.kwargs['Key'], 'pending/organizations/org/key')
 
     def test_metadata_mismatch_never_publishes(self):
         self.storage.client.head_object.return_value = {"ContentLength": 13, "ContentType": "image/png"}
@@ -152,6 +239,7 @@ class MinioIntegrationTests(unittest.TestCase):
                 self.assertIn(response.status, (200, 201, 204))
                 self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), "http://localhost:3000")
             storage.finalize(key, "application/octet-stream", len(content))
+            storage.discard_pending(key)
             url = storage.download(key, "été.bin")
             with urlopen(url, timeout=15) as response:
                 self.assertEqual(response.read(), content)

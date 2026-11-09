@@ -19,7 +19,7 @@ export function RecordImage({
   url: string | null
   organizationId?: string
   initials?: string
-  variant?: 'table' | 'detail' | 'avatar'
+  variant?: 'table' | 'detail' | 'avatar' | 'picker'
 }) {
   const { organization } = useAuth()
   const scopeId = organizationId ?? organization?.id
@@ -40,11 +40,13 @@ export function RecordImage({
   const [expanded, setExpanded] = useState(false)
   const available = !!safe && safe !== failed
   const frame =
-    variant === 'detail'
-      ? 'flex h-64 w-full items-center justify-center overflow-hidden rounded-lg border bg-muted/40 sm:h-80'
-      : variant === 'avatar'
-        ? 'flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-xs font-medium'
-        : 'flex h-20 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/40 text-xs'
+    variant === 'picker'
+      ? 'flex h-32 w-full items-center justify-center overflow-hidden rounded-lg border bg-muted/40'
+      : variant === 'detail'
+        ? 'flex h-64 w-full items-center justify-center overflow-hidden rounded-lg border bg-muted/40 sm:h-80'
+        : variant === 'avatar'
+          ? 'flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-xs font-medium'
+          : 'flex h-20 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/40 text-xs'
   if (!available) return <span className={frame}>{initials || '—'}</span>
   return (
     <>

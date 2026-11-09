@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Index, String
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base_entity import BaseEntity
 
@@ -13,6 +13,7 @@ class StoredFile(BaseEntity):
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="RESTRICT"))
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    is_selectable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     filename: Mapped[str] = mapped_column(String(255))
     content_type: Mapped[str] = mapped_column(String(127))
     size_bytes: Mapped[int] = mapped_column(BigInteger)

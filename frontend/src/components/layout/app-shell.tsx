@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Link, Navigate } from '@tanstack/react-router'
 import {
   Building2,
+  FolderOpen,
   ListTodo,
   Home,
   LoaderCircle,
@@ -102,6 +103,17 @@ function AppShellContent({ children }: { children: ReactNode }) {
                 >
                   <Users className="size-4" aria-hidden="true" />
                   Utilisateurs
+                </Link>
+                <Link
+                  to="/organization/files"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-accent"
+                  activeProps={{
+                    className: 'bg-accent text-accent-foreground',
+                  }}
+                >
+                  <FolderOpen className="size-4" aria-hidden="true" />
+                  Fichiers
                 </Link>
                 <Link
                   to="/organization/jobs"

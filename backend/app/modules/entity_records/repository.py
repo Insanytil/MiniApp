@@ -27,11 +27,12 @@ class EntityRecordRepository:
         return {str(user_id): " ".join(part for part in (first_name, last_name) if part) or email
                 for user_id, email, first_name, last_name in rows.all()}
 
-    async def image_files(self, organization_id, ids):
+    async def image_files(self, organization_id, ids, *, selectable_only=True):
         # Lock until record commit so deletion cannot race with attachment.
         return set((await self.db.scalars(select(StoredFile.id).where(
             StoredFile.organization_id == organization_id, StoredFile.id.in_(ids),
-            StoredFile.state == 'ready', StoredFile.content_type.in_(IMAGE_CONTENT_TYPES)
+            StoredFile.state == 'ready', StoredFile.content_type.in_(IMAGE_CONTENT_TYPES),
+            StoredFile.is_selectable.is_(True) if selectable_only else literal(True),
         ).order_by(StoredFile.id).with_for_update())).all())
 
     async def catalog(self, organization_id):

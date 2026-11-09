@@ -1,4 +1,5 @@
 import uuid
+import logging
 from collections.abc import Sequence
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -12,8 +13,11 @@ from app.modules.authorisation.scope import OrganizationScope
 from app.modules.files.exceptions import FileError
 from app.modules.files.policy import IMAGE_CONTENT_TYPES, signed_url_lifetime
 from app.modules.files.repository import FileRepository
-from app.modules.files.schemas import DownloadResponse, FileResponse, UploadRequest, UploadResponse
+from app.modules.files.schemas import DownloadResponse, FileResponse, UploadRequest, UploadResponse, FileManagerResponse, ManagedFileResponse
 from app.modules.files.storage import S3Storage
+
+
+logger = logging.getLogger(__name__)
 
 
 async def storage_call(func, *args):
@@ -68,10 +72,44 @@ class FileService:
             item.state = "ready"
             await self.db.commit()
             await self.db.refresh(item)
+        # Publish durably before deleting staging, so a failed DB commit can retry.
+        # Cleanup failure must not turn a completed upload into a failed response.
+        try:
+            await storage_call(self.storage.discard_pending, item.object_key)
+        except FileError:
+            logger.warning("Pending cleanup failed for file %s; lifecycle expiration remains enabled", item.id)
         return item
 
-    async def list_files(self, organization_id: uuid.UUID, *, offset: int, limit: int) -> Sequence[StoredFile]:
-        return await self.repository.list_ready(organization_id, offset=offset, limit=limit)
+    async def list_files(
+        self, organization_id: uuid.UUID, *, offset: int, limit: int,
+        search: str | None = None, images_only: bool = False,
+    ) -> Sequence[StoredFile]:
+        return await self.repository.list_ready(
+            organization_id, offset=offset, limit=limit, search=search, images_only=images_only,
+        )
+
+    async def list_managed(self, organization_id: uuid.UUID, *, offset: int, limit: int,
+                           search=None, linked=None, selectable=None) -> FileManagerResponse:
+        rows, total = await self.repository.list_managed(
+            organization_id, offset=offset, limit=limit, search=search, linked=linked, selectable=selectable,
+        )
+        return FileManagerResponse(items=[ManagedFileResponse(
+            **FileResponse.model_validate(item).model_dump(), usage_count=count,
+        ) for item, count in rows], total=total, offset=offset, limit=limit)
+
+    async def rename_file(self, file_id: uuid.UUID, scope: OrganizationScope, filename: str) -> StoredFile:
+        item = await self.get_file(scope.organization.id, file_id, lock=True)
+        item.filename = filename
+        await self.db.commit()
+        await self.db.refresh(item)
+        return item
+
+    async def set_availability(self, file_id: uuid.UUID, scope: OrganizationScope, is_selectable: bool) -> StoredFile:
+        item = await self.get_file(scope.organization.id, file_id, lock=True)
+        item.is_selectable = is_selectable
+        await self.db.commit()
+        await self.db.refresh(item)
+        return item
 
     async def download_file(self, file_id: uuid.UUID, scope: OrganizationScope, *, preview: bool) -> DownloadResponse:
         item = await self.get_file(scope.organization.id, file_id)

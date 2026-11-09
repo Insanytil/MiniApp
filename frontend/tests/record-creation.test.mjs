@@ -350,33 +350,168 @@ test('image fields preserve durable file references on creation and editing', ()
   assert.ok(buildRecordPayload(imageSchema, draft).errors.photo)
 })
 
-
 test('image upload sends the signed form without application credentials and captures its organization', async (t) => {
-  const filesUrl = await moduleUrl('../src/features/files/api.ts', { '@/lib/api': apiUrl })
+  const filesUrl = await moduleUrl('../src/features/files/api.ts', {
+    '@/lib/api': apiUrl,
+  })
   const { uploadFile } = await import(filesUrl)
   const previousFetch = globalThis.fetch
-  t.after(() => { globalThis.fetch = previousFetch })
+  t.after(() => {
+    globalThis.fetch = previousFetch
+  })
   const calls = []
   const id = '178d251b-26ab-48a5-8894-745932ab90ac'
-  const stored = { id, filename: 'photo.png', content_type: 'image/png', size_bytes: 3, state: 'ready' }
+  const stored = {
+    id,
+    filename: 'photo.png',
+    content_type: 'image/png',
+    size_bytes: 3,
+    state: 'ready',
+  }
   globalThis.fetch = async (url, options) => {
     calls.push({ url, options })
     if (calls.length === 1) {
       api.setOrganization('another-organization')
-      return new Response(JSON.stringify({ file: { ...stored, state: 'pending' },
-        url: 'http://127.0.0.1:9000/miniapp-files', fields: { key: 'pending/test', policy: 'signed' } }))
+      return new Response(
+        JSON.stringify({
+          file: { ...stored, state: 'pending' },
+          url: 'http://127.0.0.1:9000/miniapp-files',
+          fields: { key: 'pending/test', policy: 'signed' },
+        }),
+      )
     }
     if (calls.length === 2) return new Response(null, { status: 204 })
     return new Response(JSON.stringify(stored))
   }
-  const result = await uploadFile(new File(['png'], 'photo.png', { type: 'image/png' }), 'original-organization')
+  const result = await uploadFile(
+    new File(['png'], 'photo.png', { type: 'image/png' }),
+    'original-organization',
+  )
   assert.equal(result.id, id)
   assert.equal(calls.length, 3)
-  assert.equal(calls[0].options.headers.get('X-Organization-ID'), 'original-organization')
-  assert.equal(calls[2].options.headers.get('X-Organization-ID'), 'original-organization')
+  assert.equal(
+    calls[0].options.headers.get('X-Organization-ID'),
+    'original-organization',
+  )
+  assert.equal(
+    calls[2].options.headers.get('X-Organization-ID'),
+    'original-organization',
+  )
   assert.equal(calls[1].options.credentials, 'omit')
   assert.equal(calls[1].options.headers, undefined)
   assert.ok(calls[1].options.body instanceof FormData)
   assert.deepEqual([...calls[1].options.body.keys()], ['key', 'policy', 'file'])
   assert.equal(calls[2].url, `/api/organization/files/${id}/complete`)
+})
+
+test('existing file selection lists only scoped images without creating another upload', async (t) => {
+  const filesUrl = await moduleUrl('../src/features/files/api.ts', {
+    '@/lib/api': apiUrl,
+  })
+  const { listFiles, filesKey } = await import(filesUrl)
+  const id = '178d251b-26ab-48a5-8894-745932ab90ac'
+  const stored = {
+    id,
+    filename: 'shared.png',
+    content_type: 'image/png',
+    state: 'ready',
+  }
+  const fetch = t.mock.method(globalThis, 'fetch', async () =>
+    Response.json([stored]),
+  )
+  const signal = new AbortController().signal
+  api.setOrganization('another-organization')
+  const result = await listFiles('original-organization', 18, 19, {
+    imagesOnly: true,
+    search: ' shared image ',
+    signal,
+  })
+  const [url, request] = fetch.mock.calls[0].arguments
+  assert.equal(
+    url,
+    '/api/organization/files?offset=18&limit=19&search=shared+image&images_only=true',
+  )
+  assert.equal(request.method, 'GET')
+  assert.equal(request.body, undefined)
+  assert.equal(
+    request.headers.get('X-Organization-ID'),
+    'original-organization',
+  )
+  assert.equal(request.signal, signal)
+  assert.deepEqual(result, [stored])
+  assert.notDeepEqual(
+    filesKey('original-organization'),
+    filesKey('another-organization'),
+  )
+  assert.equal(fetch.mock.calls.length, 1)
+})
+
+test('file manager captures scope, filters and CSRF for rename and availability', async (t) => {
+  const filesUrl = await moduleUrl('../src/features/files/api.ts', {
+    '@/lib/api': apiUrl,
+  })
+  const { listManagedFiles, renameFile, setFileAvailability } = await import(
+    filesUrl
+  )
+  const fetch = t.mock.method(globalThis, 'fetch', async () =>
+    Response.json({}),
+  )
+  api.setOrganization('different-org')
+  await listManagedFiles('managed-org', {
+    offset: 20,
+    limit: 20,
+    search: 'shared',
+    linked: false,
+    selectable: false,
+  })
+  await renameFile('file-id', 'managed-org', 'renamed.png')
+  await setFileAvailability('file-id', 'managed-org', false)
+  assert.equal(
+    fetch.mock.calls[0].arguments[0],
+    '/api/organization/files/manage?offset=20&limit=20&search=shared&linked=false&selectable=false',
+  )
+  for (const call of fetch.mock.calls)
+    assert.equal(
+      call.arguments[1].headers.get('X-Organization-ID'),
+      'managed-org',
+    )
+  assert.equal(fetch.mock.calls[1].arguments[1].method, 'PUT')
+  assert.deepEqual(JSON.parse(fetch.mock.calls[1].arguments[1].body), {
+    filename: 'renamed.png',
+  })
+  assert.equal(fetch.mock.calls[2].arguments[1].method, 'PATCH')
+  assert.deepEqual(JSON.parse(fetch.mock.calls[2].arguments[1].body), {
+    is_selectable: false,
+  })
+  assert.equal(
+    fetch.mock.calls[2].arguments[1].headers.get('X-CSRF-Token'),
+    'csrf-test',
+  )
+})
+
+test('upload can set a recognizable filename without changing the source file', async (t) => {
+  const filesUrl = await moduleUrl('../src/features/files/api.ts', {
+    '@/lib/api': apiUrl,
+  })
+  const { uploadFile } = await import(filesUrl)
+  let call = 0
+  let uploadedName
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    call++
+    if (call === 1) {
+      uploadedName = JSON.parse(options.body).filename
+      return Response.json({
+        file: { id: 'file-id' },
+        url: 'http://127.0.0.1:9000/miniapp-files',
+        fields: { key: 'test' },
+      })
+    }
+    if (call === 2) return new Response(null, { status: 204 })
+    return Response.json({ id: 'file-id', filename: uploadedName })
+  })
+  const original = new File(['png'], 'IMG_123.png', { type: 'image/png' })
+  await uploadFile(original, 'org', undefined, 'Logo de l’entreprise.png')
+  assert.equal(uploadedName, 'Logo de l’entreprise.png')
+  assert.equal(original.name, 'IMG_123.png')
+  assert.equal(call, 3)
 })

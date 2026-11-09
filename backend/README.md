@@ -162,7 +162,9 @@ fichiers ne peut pas être supprimée physiquement (clé étrangère RESTRICT).
 
 Les métadonnées MIME sont déclaratives : aucune analyse antivirus ni transformation
 d'image n'est effectuée. Une URL signée reste utilisable jusqu'à expiration tant que
-l'objet existe. Les copies temporaires expirent via MinIO, mais les métadonnées des
+l'objet existe. La copie temporaire est supprimée après validation et commit en
+base. En cas d'échec de nettoyage, de dépôt abandonné ou de réutilisation tardive
+d'un formulaire signé, elle expire via MinIO après un jour. Les métadonnées des
 dépôts abandonnés restent en état `pending`. La migration est fournie ; elle n'est
 pas appliquée automatiquement au démarrage de l'API.
 
@@ -208,3 +210,41 @@ Les membres suspendus conservent leur nom dans l'historique.
 
 Appliquer la migration `c92f15a7b301` depuis `backend` après synchronisation des
 dépendances par le développeur : `uv run --no-sync alembic upgrade head`.
+
+### Réutiliser un fichier existant
+
+Le bouton **Choisir une image existante** ouvre la bibliothèque de l'organisation
+avec aperçu, recherche par nom et pagination. La sélection conserve le même
+`file:<UUID>` : aucun objet n'est recopié et aucun dépôt n'est déclenché. Une image
+peut donc être liée à plusieurs champs ou fiches. Le contrôle de disponibilité et
+d'organisation reste effectué lors de l'enregistrement de chaque fiche.
+
+`GET /organization/files` accepte désormais `search` (255 caractères maximum) et
+`images_only=true`. Seuls les fichiers prêts de l'organisation autorisée sont
+listés. Le composant `features/files/file-picker.tsx` est réutilisable pour d'autres
+composants et peut également proposer tous les types de fichiers. Cette bibliothèque
+porte sur les fichiers enregistrés par l'application ; elle n'expose pas les objets
+S3 déposés en dehors de son catalogue.
+
+### Gestionnaire administrateur
+
+**Administration de l'organisation → Fichiers** donne accès au catalogue complet
+(fichiers prêts et dépôts en attente), à la recherche et aux filtres d'utilisation
+et de disponibilité. L'utilisation compte les fiches qui référencent le fichier,
+même si plusieurs champs d'une fiche l'utilisent. Les administrateurs peuvent
+récupérer, renommer, rendre disponible/indisponible ou supprimer un fichier non lié.
+La suppression est contrôlée à nouveau côté serveur, y compris après ouverture de
+la confirmation. Les nouvelles sélections ignorent les fichiers indisponibles ;
+les liens existants restent affichables et peuvent être conservés à l'édition,
+mais ne peuvent pas être copiés dans un autre champ tant que le fichier est masqué.
+
+Chaque dépôt propose une confirmation du nom, également depuis les champs image.
+Le renommage modifie les métadonnées et le nom de téléchargement, sans recopier
+l'objet S3 ni modifier les références des fiches.
+
+Endpoints administrateur : `GET /organization/files/manage`,
+`PUT /organization/files/{id}/name` avec `{filename}` et
+`PATCH /organization/files/{id}/availability` avec `{is_selectable}`.
+Session, CSRF pour les mutations et appartenance administrateur sont requis.
+Appliquer la migration `d51eaf124930` : depuis `backend`,
+`uv run --no-sync alembic upgrade head`.

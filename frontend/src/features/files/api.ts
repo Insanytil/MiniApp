@@ -7,6 +7,7 @@ export interface StoredFile {
   size_bytes: number
   state: 'pending' | 'ready' | 'deleted'
   created_at: string
+  is_selectable: boolean
 }
 
 interface UploadTicket {
@@ -20,6 +21,7 @@ export async function uploadFile(
   file: File,
   organizationId: string,
   signal?: AbortSignal,
+  filename = file.name,
 ): Promise<StoredFile> {
   const ticket = await api.request<UploadTicket>(
     '/organization/files/uploads',
@@ -27,7 +29,7 @@ export async function uploadFile(
       method: 'POST',
       organizationId,
       body: {
-        filename: file.name,
+        filename,
         content_type: file.type || 'application/octet-stream',
         size_bytes: file.size,
       },
@@ -62,13 +64,25 @@ export async function uploadFile(
   }
 }
 
-export function listFiles(organizationId: string, offset = 0, limit = 50) {
-  return api.request<StoredFile[]>(
-    `/organization/files?offset=${offset}&limit=${limit}`,
-    {
-      organizationId,
-    },
-  )
+export const filesKey = (organizationId: string) =>
+  ['organizations', organizationId, 'files'] as const
+
+export function listFiles(
+  organizationId: string,
+  offset = 0,
+  limit = 50,
+  options: { search?: string; imagesOnly?: boolean; signal?: AbortSignal } = {},
+) {
+  const query = new URLSearchParams({
+    offset: String(offset),
+    limit: String(limit),
+  })
+  if (options.search?.trim()) query.set('search', options.search.trim())
+  if (options.imagesOnly) query.set('images_only', 'true')
+  return api.request<StoredFile[]>(`/organization/files?${query}`, {
+    organizationId,
+    signal: options.signal,
+  })
 }
 
 export function getFileDownload(
@@ -88,5 +102,64 @@ export function deleteFile(id: string, organizationId: string) {
   return api.request<void>(`/organization/files/${id}`, {
     method: 'DELETE',
     organizationId,
+  })
+}
+
+export interface ManagedFile extends StoredFile {
+  usage_count: number
+}
+export interface FileManagerResult {
+  items: ManagedFile[]
+  total: number
+  offset: number
+  limit: number
+}
+
+export function listManagedFiles(
+  organizationId: string,
+  options: {
+    offset: number
+    limit: number
+    search?: string
+    linked?: boolean
+    selectable?: boolean
+    signal?: AbortSignal
+  },
+) {
+  const query = new URLSearchParams({
+    offset: String(options.offset),
+    limit: String(options.limit),
+  })
+  if (options.search?.trim()) query.set('search', options.search.trim())
+  if (options.linked !== undefined) query.set('linked', String(options.linked))
+  if (options.selectable !== undefined)
+    query.set('selectable', String(options.selectable))
+  return api.request<FileManagerResult>(`/organization/files/manage?${query}`, {
+    organizationId,
+    signal: options.signal,
+  })
+}
+
+export function renameFile(
+  id: string,
+  organizationId: string,
+  filename: string,
+) {
+  return api.request<StoredFile>(`/organization/files/${id}/name`, {
+    method: 'PUT',
+    organizationId,
+    body: { filename },
+  })
+}
+
+export function setFileAvailability(
+  id: string,
+  organizationId: string,
+  isSelectable: boolean,
+) {
+  return api.request<StoredFile>(`/organization/files/${id}/availability`, {
+    method: 'PATCH',
+    organizationId,
+    body: { is_selectable: isSelectable },
   })
 }

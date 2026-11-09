@@ -1,19 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
-import { LoaderCircle, Upload, X } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Upload, X, Images } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ApiError, errorMessage } from '@/lib/api/client'
 import { RecordImage } from '@/features/files/record-image'
 import { imageFileId } from '@/features/entity-types/presentation'
-import { uploadFile } from './api'
+import { FilePicker } from './file-picker'
+import { FileUploadDialog } from './file-upload-dialog'
 
-const imageTypes = [
-  'image/png',
-  'image/jpeg',
-  'image/gif',
-  'image/webp',
-  'image/avif',
-]
+import { imageContentTypes } from './policy'
 
 export function ImageFieldInput({
   id,
@@ -36,16 +30,16 @@ export function ImageFieldInput({
   onBlur: () => void
   onUploadBusy: (busy: boolean) => void
 }) {
+  const [picking, setPicking] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const controller = useRef<AbortController | null>(null)
   const input = useRef<HTMLInputElement | null>(null)
-  useEffect(() => () => controller.current?.abort(), [])
 
-  async function deposit(file?: File) {
-    if (!file || disabled || controller.current) return
+  function deposit(file?: File) {
+    if (!file || disabled || busy) return
     setError(null)
-    if (!imageTypes.includes(file.type)) {
+    if (!imageContentTypes.includes(file.type)) {
       setError('Choisissez une image PNG, JPEG, GIF, WebP ou AVIF.')
       return
     }
@@ -53,28 +47,7 @@ export function ImageFieldInput({
       setError('Ce fichier est vide.')
       return
     }
-    const current = new AbortController()
-    controller.current = current
-    setBusy(true)
-    onUploadBusy(true)
-    try {
-      const stored = await uploadFile(file, organizationId, current.signal)
-      if (!current.signal.aborted) onChange(`file:${stored.id}`)
-    } catch (cause) {
-      if (!current.signal.aborted)
-        setError(
-          cause instanceof ApiError && cause.status === 413
-            ? 'Cette image dépasse la taille maximale autorisée.'
-            : errorMessage(cause),
-        )
-    } finally {
-      controller.current = null
-      if (!current.signal.aborted) {
-        setBusy(false)
-        onUploadBusy(false)
-        onBlur()
-      }
-    }
+    setPendingFile(file)
   }
 
   return (
@@ -95,7 +68,7 @@ export function ImageFieldInput({
           ref={input}
           id={id}
           type="file"
-          accept={imageTypes.join(',')}
+          accept={imageContentTypes.join(',')}
           disabled={disabled || busy}
           aria-invalid={invalid || !!error}
           aria-describedby={error ? `${id}-upload-error` : describedBy}
@@ -109,12 +82,6 @@ export function ImageFieldInput({
         <p id={`${id}-hint`} className="text-xs text-muted-foreground">
           Choisissez une image ou glissez-la ici. PNG, JPEG, GIF, WebP ou AVIF.
         </p>
-        {busy && (
-          <p role="status" className="flex items-center gap-2 text-sm">
-            <LoaderCircle className="size-4 animate-spin" />
-            Dépôt de l’image…
-          </p>
-        )}
         {value && (
           <RecordImage
             url={value}
@@ -151,6 +118,46 @@ export function ImageFieldInput({
           </div>
         )}
       </div>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={disabled || busy}
+        onClick={() => setPicking(true)}
+      >
+        <Images />
+        Choisir une image existante
+      </Button>
+      {picking && !disabled && !busy && (
+        <FilePicker
+          key={organizationId}
+          organizationId={organizationId}
+          imagesOnly
+          selectedId={imageFileId(value)}
+          onClose={() => setPicking(false)}
+          onSelect={(file) => {
+            onChange(`file:${file.id}`)
+            setError(null)
+            setPicking(false)
+            onBlur()
+          }}
+        />
+      )}
+      {pendingFile && (
+        <FileUploadDialog
+          file={pendingFile}
+          organizationId={organizationId}
+          onClose={() => setPendingFile(null)}
+          onBusyChange={(uploadBusy) => {
+            setBusy(uploadBusy)
+            onUploadBusy(uploadBusy)
+          }}
+          onUploaded={(stored) => {
+            onChange(`file:${stored.id}`)
+            setError(null)
+            onBlur()
+          }}
+        />
+      )}
       <details>
         <summary className="cursor-pointer text-xs text-muted-foreground">
           Utiliser une URL d’image

@@ -46,9 +46,12 @@ class S3Storage:
             ExpiresIn=signed_url_lifetime(settings.s3_url_lifetime_seconds),
         )
 
+    def discard_pending(self, key: str) -> None:
+        self.client.delete_object(Bucket=settings.s3_bucket, Key="pending/" + key)
+
     def delete(self, key: str):
         self.client.delete_object(Bucket=settings.s3_bucket, Key=key)
-        self.client.delete_object(Bucket=settings.s3_bucket, Key="pending/" + key)
+        self.discard_pending(key)
 
 
 @lru_cache

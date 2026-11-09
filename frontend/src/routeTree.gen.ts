@@ -21,6 +21,7 @@ import { Route as ProtectedOrganizationRouteImport } from './routes/_protected/o
 import { Route as ProtectedPlatformRouteImport } from './routes/_protected/platform'
 import { Route as ProtectedWorkspaceRouteImport } from './routes/_protected/workspace'
 import { Route as ProtectedOrganizationConfigurationRouteImport } from './routes/_protected/organization/configuration'
+import { Route as ProtectedOrganizationFilesRouteImport } from './routes/_protected/organization/files'
 import { Route as ProtectedOrganizationJobsRouteImport } from './routes/_protected/organization/jobs'
 import { Route as ProtectedOrganizationNavigationRouteImport } from './routes/_protected/organization/navigation'
 import { Route as ProtectedOrganizationUsersRouteImport } from './routes/_protected/organization/users'
@@ -88,6 +89,12 @@ const ProtectedOrganizationConfigurationRoute =
     path: '/configuration',
     getParentRoute: () => ProtectedOrganizationRoute,
   } as any)
+const ProtectedOrganizationFilesRoute =
+  ProtectedOrganizationFilesRouteImport.update({
+    id: '/files',
+    path: '/files',
+    getParentRoute: () => ProtectedOrganizationRoute,
+  } as any)
 const ProtectedOrganizationJobsRoute =
   ProtectedOrganizationJobsRouteImport.update({
     id: '/jobs',
@@ -145,6 +152,7 @@ export interface FileRoutesByFullPath {
   '/platform': typeof ProtectedPlatformRouteWithChildren
   '/workspace': typeof ProtectedWorkspaceRouteWithChildren
   '/organization/configuration': typeof ProtectedOrganizationConfigurationRoute
+  '/organization/files': typeof ProtectedOrganizationFilesRoute
   '/organization/jobs': typeof ProtectedOrganizationJobsRoute
   '/organization/navigation': typeof ProtectedOrganizationNavigationRoute
   '/organization/users': typeof ProtectedOrganizationUsersRoute
@@ -164,6 +172,7 @@ export interface FileRoutesByTo {
   '/platform': typeof ProtectedPlatformRouteWithChildren
   '/workspace': typeof ProtectedWorkspaceRouteWithChildren
   '/organization/configuration': typeof ProtectedOrganizationConfigurationRoute
+  '/organization/files': typeof ProtectedOrganizationFilesRoute
   '/organization/jobs': typeof ProtectedOrganizationJobsRoute
   '/organization/navigation': typeof ProtectedOrganizationNavigationRoute
   '/organization/users': typeof ProtectedOrganizationUsersRoute
@@ -187,6 +196,7 @@ export interface FileRoutesById {
   '/_protected/workspace': typeof ProtectedWorkspaceRouteWithChildren
   '/_neutral/': typeof NeutralIndexRoute
   '/_protected/organization/configuration': typeof ProtectedOrganizationConfigurationRoute
+  '/_protected/organization/files': typeof ProtectedOrganizationFilesRoute
   '/_protected/organization/jobs': typeof ProtectedOrganizationJobsRoute
   '/_protected/organization/navigation': typeof ProtectedOrganizationNavigationRoute
   '/_protected/organization/users': typeof ProtectedOrganizationUsersRoute
@@ -208,6 +218,7 @@ export interface FileRouteTypes {
     | '/platform'
     | '/workspace'
     | '/organization/configuration'
+    | '/organization/files'
     | '/organization/jobs'
     | '/organization/navigation'
     | '/organization/users'
@@ -227,6 +238,7 @@ export interface FileRouteTypes {
     | '/platform'
     | '/workspace'
     | '/organization/configuration'
+    | '/organization/files'
     | '/organization/jobs'
     | '/organization/navigation'
     | '/organization/users'
@@ -249,6 +261,7 @@ export interface FileRouteTypes {
     | '/_protected/workspace'
     | '/_neutral/'
     | '/_protected/organization/configuration'
+    | '/_protected/organization/files'
     | '/_protected/organization/jobs'
     | '/_protected/organization/navigation'
     | '/_protected/organization/users'
@@ -351,6 +364,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedOrganizationConfigurationRouteImport
       parentRoute: typeof ProtectedOrganizationRoute
     }
+    '/_protected/organization/files': {
+      id: '/_protected/organization/files'
+      path: '/files'
+      fullPath: '/organization/files'
+      preLoaderRoute: typeof ProtectedOrganizationFilesRouteImport
+      parentRoute: typeof ProtectedOrganizationRoute
+    }
     '/_protected/organization/jobs': {
       id: '/_protected/organization/jobs'
       path: '/jobs'
@@ -437,6 +457,7 @@ const NeutralRouteWithChildren =
 
 interface ProtectedOrganizationRouteChildren {
   ProtectedOrganizationConfigurationRoute: typeof ProtectedOrganizationConfigurationRoute
+  ProtectedOrganizationFilesRoute: typeof ProtectedOrganizationFilesRoute
   ProtectedOrganizationJobsRoute: typeof ProtectedOrganizationJobsRoute
   ProtectedOrganizationNavigationRoute: typeof ProtectedOrganizationNavigationRoute
   ProtectedOrganizationUsersRoute: typeof ProtectedOrganizationUsersRoute
@@ -446,6 +467,7 @@ interface ProtectedOrganizationRouteChildren {
 const ProtectedOrganizationRouteChildren: ProtectedOrganizationRouteChildren = {
   ProtectedOrganizationConfigurationRoute:
     ProtectedOrganizationConfigurationRoute,
+  ProtectedOrganizationFilesRoute: ProtectedOrganizationFilesRoute,
   ProtectedOrganizationJobsRoute: ProtectedOrganizationJobsRoute,
   ProtectedOrganizationNavigationRoute: ProtectedOrganizationNavigationRoute,
   ProtectedOrganizationUsersRoute: ProtectedOrganizationUsersRoute,

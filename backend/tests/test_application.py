@@ -14,6 +14,8 @@ from app.modules.auth.dependencies import _authenticate_session
 from app.modules.auth.exceptions import InvalidSessionError
 from app.modules.files.exceptions import FileError
 from app.modules.auth.dependencies import get_authenticated_session
+from app.modules.authorisation.dependencies import require_organization_scope
+from app.models.organization_role import OrganizationRole
 from app.modules.authorisation.dependencies import require_platform_admin
 from app.modules.platform_administration.dependencies import get_platform_user_administration_service
 from app.modules.platform_administration.exceptions import OrganizationMembershipNotFoundError
@@ -78,6 +80,16 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
         )
         service.set_organization_access.side_effect = OrganizationMembershipNotFoundError()
         self.assertEqual(await request(application, 'PATCH', path, payload), 404)
+
+    async def test_file_manager_requires_organization_administrator(self):
+        application = create_app()
+        application.dependency_overrides[require_organization_scope] = lambda: SimpleNamespace(role=OrganizationRole.USER)
+        for path, method, payload in (
+            ('/organization/files/manage', 'GET', b''),
+            ('/organization/files/12345678-1234-4234-8234-123456789abc/availability', 'PATCH', b'{"is_selectable":false}'),
+            ('/organization/files/12345678-1234-4234-8234-123456789abc/name', 'PUT', b'{"filename":"new.png"}'),
+        ):
+            self.assertEqual(await request(application, method, path, payload), 403)
 
     def test_file_errors_preserve_the_public_response_contract(self):
         response = file_error_handler(Request({'type': 'http'}), FileError(409, 'File is not ready'))

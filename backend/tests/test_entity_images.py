@@ -54,6 +54,19 @@ class ImageLinkTests(unittest.IsolatedAsyncioTestCase):
                                                                   {'photo': 'https://example.org/photo.png'})
         repository.image_files.assert_not_awaited()
 
+    async def test_unavailable_image_can_stay_in_its_original_field_but_cannot_be_reused(self):
+        file_id, org_id = uuid.uuid4(), uuid.uuid4()
+        async def image_files(org, ids, *, selectable_only=True):
+            return set() if selectable_only else ids
+        repository = SimpleNamespace(image_files=AsyncMock(side_effect=image_files))
+        service = EntityRecordService(repository)
+        fields = [{'id': 'photo', 'kind': 'image'}, {'id': 'other', 'kind': 'image'}]
+        existing = {'photo': f'file:{file_id}'}
+        await service.validate_image_files(org_id, fields, existing, existing)
+        with self.assertRaises(RecordValidationError) as error:
+            await service.validate_image_files(org_id, fields, {**existing, 'other': f'file:{file_id}'}, existing)
+        self.assertEqual([issue['field'] for issue in error.exception.issues], ['other'])
+
     async def test_repository_filters_and_locks_image_files(self):
         org_id, file_id = uuid.uuid4(), uuid.uuid4()
         db = SimpleNamespace(scalars=AsyncMock(return_value=SimpleNamespace(all=lambda: [file_id])))

@@ -25,15 +25,23 @@ class EntityRecordService:
         ids = {actor for record in records for actor in (record.created_by, record.updated_by) if actor is not None}
         return await self.repository.actor_labels(organization_id, ids) if ids else {}
 
-    async def validate_image_files(self, organization_id, fields, values):
+    async def validate_image_files(self, organization_id, fields, values, existing_values=None):
         references = {field['id']: uuid.UUID(values[field['id']][5:]) for field in fields
                       if field['kind'] == 'image' and isinstance(values.get(field['id']), str)
                       and values[field['id']].startswith('file:')}
         if not references:
             return
-        files = await self.repository.image_files(organization_id, set(references.values()))
+        existing_values = existing_values or {}
+        unchanged = {field_id: file_id for field_id, file_id in references.items()
+                     if existing_values.get(field_id) == values[field_id]}
+        changed = {field_id: file_id for field_id, file_id in references.items() if field_id not in unchanged}
+        available = await self.repository.image_files(organization_id, set(changed.values())) if changed else set()
+        retained = await self.repository.image_files(
+            organization_id, set(unchanged.values()), selectable_only=False,
+        ) if unchanged else set()
         issues = [{'field': field_id, 'message': 'Cette image est indisponible ou ne fait pas partie de cette organisation.'}
-                  for field_id, file_id in references.items() if file_id not in files]
+                  for field_id, file_id in references.items()
+                  if file_id not in (retained if field_id in unchanged else available)]
         if issues:
             raise RecordValidationError(issues)
 
@@ -205,7 +213,7 @@ class EntityRecordService:
         if record.updated_at != payload.expected_updated_at:
             raise RecordConflictError()
         values = validate_values(entity_type.configuration['fields'], {str(key): value for key, value in payload.values.items()})
-        await self.validate_image_files(organization_id, entity_type.configuration['fields'], values)
+        await self.validate_image_files(organization_id, entity_type.configuration['fields'], values, record.values)
         assignments = [item.model_dump(mode='json') for item in payload.relations]
         old_edges = await self.repository.record_edges(organization_id, record_id)
         for assignment in assignments:
