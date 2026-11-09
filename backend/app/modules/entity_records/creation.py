@@ -42,9 +42,10 @@ def _email(value):
 
 def _image(value):
     value = _text(value, 2048)
-    if not safe_image(value):
-        raise ValueError('Utilisez une URL HTTPS ou un chemin d’image de l’application.')
-    return value
+    image = safe_image(value)
+    if not image:
+        raise ValueError('Déposez une image ou utilisez une URL HTTPS valide.')
+    return image
 
 
 def _date(value):

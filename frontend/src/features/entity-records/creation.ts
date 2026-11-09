@@ -178,7 +178,7 @@ export function buildRecordPayload(
     } else if (field.kind === 'image') {
       const url = safeImageUrl(raw)
       if (!url || url.length > 2048)
-        errors[field.id] = 'Utilisez une URL HTTPS ou un chemin d’image valide.'
+        errors[field.id] = 'Déposez une image ou utilisez une URL HTTPS valide.'
       else values[field.id] = url
     } else if (field.kind === 'email') {
       if (raw.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw))

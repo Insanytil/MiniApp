@@ -47,7 +47,7 @@ import type {
 } from '../creation'
 import type { FieldDefinition } from '@/features/entity-types/configuration'
 import { recordsKey } from '../records'
-import { RecordImage } from './record-cell'
+import { ImageFieldInput } from '@/features/files/image-field-input'
 
 export function RecordCreateSheet({
   organizationId,
@@ -174,7 +174,8 @@ function CreateForm({
         })
     },
   })
-  const pending = mutation.isPending || reloadBusy
+  const [uploadingFields, setUploadingFields] = useState<string[]>([])
+  const pending = mutation.isPending || reloadBusy || uploadingFields.length > 0
   useEffect(() => {
     onBusyChange(pending)
     return () => onBusyChange(false)
@@ -234,6 +235,14 @@ function CreateForm({
               {(entry) => (
                 <ScalarInput
                   field={field}
+                  organizationId={organizationId}
+                  onUploadBusy={(busy) =>
+                    setUploadingFields((previous) =>
+                      busy
+                        ? [...new Set([...previous, field.id])]
+                        : previous.filter((id) => id !== field.id),
+                    )
+                  }
                   value={entry.state.value}
                   error={errorFor(field.id)}
                   disabled={pending}
@@ -387,6 +396,8 @@ function CreateForm({
   )
 }
 export function ScalarInput({
+  organizationId,
+  onUploadBusy,
   inputId,
   compact = false,
   field,
@@ -396,6 +407,8 @@ export function ScalarInput({
   onChange,
   onBlur,
 }: {
+  organizationId: string
+  onUploadBusy: (busy: boolean) => void
   inputId?: string
   compact?: boolean
   field: FieldDefinition
@@ -427,7 +440,19 @@ export function ScalarInput({
           <span className="text-muted-foreground"> (obligatoire)</span>
         )}
       </Label>
-      {field.kind === 'choice' && field.multiple ? (
+      {field.kind === 'image' ? (
+        <ImageFieldInput
+          id={id}
+          value={common.value}
+          organizationId={organizationId}
+          disabled={disabled}
+          invalid={!!error}
+          describedBy={describedBy}
+          onBlur={onBlur}
+          onChange={onChange}
+          onUploadBusy={onUploadBusy}
+        />
+      ) : field.kind === 'choice' && field.multiple ? (
         <fieldset
           id={id}
           disabled={disabled}
@@ -506,9 +531,7 @@ export function ScalarInput({
                   ? 'date'
                   : field.kind === 'email'
                     ? 'email'
-                    : field.kind === 'phone'
-                      ? 'tel'
-                      : 'text'
+                    : 'tel'
           }
           step={
             field.kind === 'decimal'
@@ -517,25 +540,9 @@ export function ScalarInput({
                 ? '1'
                 : undefined
           }
-          maxLength={
-            field.kind === 'email'
-              ? 320
-              : field.kind === 'image'
-                ? 2048
-                : undefined
-          }
+          maxLength={field.kind === 'email' ? 320 : undefined}
           onChange={(event) => onChange(event.target.value)}
         />
-      )}
-      {field.kind === 'image' && (
-        <div className="space-y-3">
-          <p id={`${id}-hint`} className="text-xs text-muted-foreground">
-            URL HTTPS ou chemin d’une image de l’application.
-          </p>
-          {common.value.trim() && (
-            <RecordImage url={common.value.trim()} variant="detail" />
-          )}
-        </div>
       )}
       {error && (
         <p id={`${id}-error`} role="alert" className="text-xs text-destructive">

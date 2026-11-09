@@ -55,8 +55,49 @@ services:
 
     restart: unless-stopped
 
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-miniapp-local}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change-me-minio-local-only}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${FRONTEND_BASE_URL:-http://localhost:3000}
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio:
+        condition: service_started
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-miniapp-local}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change-me-minio-local-only}
+      S3_BUCKET: ${S3_BUCKET:-miniapp-files}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        attempts=0
+        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" && mc ready local; do
+          attempts=$$((attempts + 1))
+          if [ "$$attempts" -ge 30 ]; then exit 1; fi
+          sleep 2
+        done
+        mc mb --ignore-existing "local/$$S3_BUCKET"
+        mc anonymous set none "local/$$S3_BUCKET"
+        mc ilm import "local/$$S3_BUCKET" <<'JSON'
+        {"Rules":[{"ID":"expire-pending","Status":"Enabled","Filter":{"Prefix":"pending/"},"Expiration":{"Days":1}}]}
+        JSON
+    restart: "no"
+
 volumes:
   postgres_data:
     name: Miniapp-database-data
   redis_data:
     name: Miniapp-redis-data
+  minio_data:
+    name: Miniapp-minio-data

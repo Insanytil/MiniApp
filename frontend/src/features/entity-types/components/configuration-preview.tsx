@@ -322,23 +322,13 @@ function RecordPresentation({
   fallback: string
 }) {
   const presentation = presentRecord(profile, values, fallback)
-  const [failedImage, setFailedImage] = useState<string | null>(null)
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-xs font-medium">
-        {presentation.image && presentation.image !== failedImage ? (
-          <img
-            src={presentation.image}
-            alt=""
-            className="size-full object-cover"
-            referrerPolicy="no-referrer"
-            loading="lazy"
-            onError={() => setFailedImage(presentation.image)}
-          />
-        ) : (
-          presentation.initials
-        )}
-      </div>
+      <RecordImage
+        url={presentation.image}
+        initials={presentation.initials}
+        variant="avatar"
+      />
       <div className="min-w-0">
         <p className="max-w-64 truncate font-medium" title={presentation.title}>
           {presentation.title}

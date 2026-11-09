@@ -17,6 +17,7 @@ from app.modules.entity_types.router import router as entity_types_router
 
 from app.modules.organization_navigation.router import router as organization_navigation_router
 from app.modules.entity_records.router import router as entity_records_router
+from app.modules.files.router import router as files_router
 
 app = FastAPI(
     title="MiniApp API",
@@ -37,4 +38,4 @@ app.include_router(entity_types_router)
 app.include_router(organization_navigation_router)
 app.include_router(entity_records_router)
 
-
+app.include_router(files_router)

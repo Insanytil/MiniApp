@@ -19,7 +19,7 @@ Adapter les valeurs de [`.env`](.env.example), notamment les identifiants Postgr
 Depuis la racine du dépôt, démarrer les services nécessaires :
 
 ```powershell
-docker compose --env-file backend/.env -f infra/compose.yaml up -d postgres redis mailpit
+docker compose --env-file backend/.env -f infra/compose.yaml up -d postgres redis mailpit minio minio-init
 ```
 
 - PostgreSQL : `127.0.0.1:5432` par défaut.
@@ -106,3 +106,84 @@ L'API est accessible sur <http://127.0.0.1:8000>, sa documentation sur <http://1
 Les réglages locaux PyCharm (`.idea/`) sont ignorés par Git. Ce README sert de référence partagée pour recréer les configurations.
 
 Références : [configuration Python dans PyCharm](https://www.jetbrains.com/help/pycharm/run-debug-configuration-python.html), [concurrence Celery](https://docs.celeryq.dev/en/stable/userguide/concurrency/index.html).
+
+## Fichiers et images — MinIO
+
+Le stockage local utilise les images officielles MinIO et `mc`, avec des versions
+fixées dans `infra/compose.yaml`. Le volume `Miniapp-minio-data` conserve les objets.
+L'initialisation attend MinIO, crée `S3_BUCKET`, interdit l'accès anonyme et configure
+l'expiration des objets `pending/` après un jour. Elle peut être relancée avec la
+même commande ; elle remplace les règles de cycle de vie de ce bucket dédié.
+
+```powershell
+# À la racine du dépôt
+docker compose --env-file backend/.env -f infra/compose.yaml up -d minio minio-init
+docker compose --env-file backend/.env -f infra/compose.yaml logs minio-init
+# Depuis backend, après installation des dépendances par le développeur
+uv run alembic upgrade head
+uv run python -m unittest discover -s tests -p test_files.py -v
+```
+
+- API S3 : <http://127.0.0.1:9000>.
+- Console : <http://127.0.0.1:9001>, avec `MINIO_ROOT_USER` et `MINIO_ROOT_PASSWORD`.
+- Recopier les variables MinIO/S3 de `.env.example` dans `.env` et conserver la
+  correspondance entre identifiants MinIO et S3. Les valeurs par défaut sont locales.
+- `S3_ENDPOINT_URL` sert aux opérations serveur. Depuis un backend conteneurisé,
+  utiliser `http://minio:9000`. `S3_PUBLIC_ENDPOINT_URL` doit rester accessible au
+  navigateur ; le nom d'hôte fait partie de la signature et ne doit pas être réécrit.
+- `FRONTEND_BASE_URL` configure l'origine autorisée par MinIO pour les requêtes
+  navigateur. Recréer le conteneur MinIO après modification.
+- Limite par défaut : 20 Mio ; signatures valables 300 secondes (maximum 3600).
+
+Les routes sous `/organization/files` utilisent la session et `X-Organization-ID`.
+Les mutations exigent également le jeton CSRF habituel.
+
+| Route | Usage |
+| --- | --- |
+| `POST /uploads` | `{filename, content_type, size_bytes}` → métadonnées et formulaire signé `{url, fields, expires_in}` |
+| `POST /{id}/complete` | Vérifie taille/type stockés, puis copie conditionnelle vers une clé définitive |
+| `GET ?offset=0&limit=50` | Liste des fichiers disponibles de l'organisation, limite maximale 100 |
+| `GET /{id}/download` | URL signée de téléchargement, non mise en cache par l'API |
+| `GET /{id}/download?preview=true` | Affichage inline pour PNG/JPEG/GIF/WebP/AVIF ; autres types téléchargés |
+| `DELETE /{id}` | Supprime les objets et marque les métadonnées supprimées |
+
+Envoyer le formulaire directement à MinIO en `multipart/form-data`, avec les champs
+signés puis le champ `file` en dernier, sans cookies applicatifs ni jeton CSRF.
+Appeler ensuite `/complete`. Le fichier est visible seulement après validation.
+Le client réutilisable `frontend/src/features/files/api.ts` réalise ce flux et
+conserve explicitement l'organisation sélectionnée au début de l'envoi.
+Les composants métier peuvent conserver l'identifiant du fichier et redemander une
+URL lorsqu'ils en ont besoin ; ne pas enregistrer d'URL signée en base.
+
+Tout membre actif peut lire et déposer dans son organisation. Seul l'auteur peut
+finaliser ; l'auteur ou un administrateur peut supprimer. Les superadministrateurs
+peuvent aussi effectuer ces opérations. Une organisation ayant des métadonnées de
+fichiers ne peut pas être supprimée physiquement (clé étrangère RESTRICT).
+
+Les métadonnées MIME sont déclaratives : aucune analyse antivirus ni transformation
+d'image n'est effectuée. Une URL signée reste utilisable jusqu'à expiration tant que
+l'objet existe. Les copies temporaires expirent via MinIO, mais les métadonnées des
+dépôts abandonnés restent en état `pending`. La migration est fournie ; elle n'est
+pas appliquée automatiquement au démarrage de l'API.
+
+Références : [MinIO Docker](https://github.com/minio/minio/blob/master/docs/docker/README.md),
+[formulaires et URL signés Boto3](https://docs.aws.amazon.com/boto3/latest/guide/s3-presigned-urls.html).
+
+### Champs image des fiches
+
+Les formulaires de création et de modification proposent le choix d'un fichier,
+le glisser-déposer, l'aperçu, le remplacement et le retrait de l'image. Ils bloquent
+l'enregistrement pendant le dépôt. Formats pris en charge : PNG, JPEG, GIF, WebP,
+AVIF. Les anciennes URL HTTPS et chemins applicatifs restent lisibles.
+
+La valeur durable d'un champ image est `file:<UUID>` ; aucune URL signée n'est
+stockée dans la fiche. À chaque création ou modification, l'API vérifie que le
+fichier est prêt, possède un type MIME image accepté et appartient à l'organisation
+courante. Le verrou du fichier reste acquis jusqu'à l'enregistrement de la fiche.
+Une suppression de fichier encore référencé renvoie 409. Retirer ou remplacer une
+image dans un champ ne supprime pas le fichier, qui peut être partagé par plusieurs
+fiches. Un dépôt terminé puis abandonné dans le formulaire reste dans la liste des
+fichiers de l'organisation.
+
+Les tableaux, détails et profils d'affichage demandent une URL signée à partir de
+cette référence et la renouvellent avant son expiration.

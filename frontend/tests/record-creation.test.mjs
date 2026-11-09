@@ -332,3 +332,51 @@ test('edit autocomplete keeps the current record identity in the request', async
   )
   assert.match(fetch.mock.calls[0].arguments[0], /record_id=record/)
 })
+
+test('image fields preserve durable file references on creation and editing', () => {
+  const id = '178d251b-26ab-48a5-8894-745932ab90ac'
+  const imageSchema = {
+    ...schema,
+    fields: [field('photo', 'image', true)],
+    relations: [],
+    values: { photo: `file:${id}` },
+  }
+  const draft = initialDraft(imageSchema)
+  assert.equal(draft.values.photo, `file:${id}`)
+  const result = buildRecordPayload(imageSchema, draft)
+  assert.deepEqual(result.errors, {})
+  assert.equal(result.payload.values.photo, `file:${id}`)
+  draft.values.photo = 'file:invalid'
+  assert.ok(buildRecordPayload(imageSchema, draft).errors.photo)
+})
+
+
+test('image upload sends the signed form without application credentials and captures its organization', async (t) => {
+  const filesUrl = await moduleUrl('../src/features/files/api.ts', { '@/lib/api': apiUrl })
+  const { uploadFile } = await import(filesUrl)
+  const previousFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = previousFetch })
+  const calls = []
+  const id = '178d251b-26ab-48a5-8894-745932ab90ac'
+  const stored = { id, filename: 'photo.png', content_type: 'image/png', size_bytes: 3, state: 'ready' }
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options })
+    if (calls.length === 1) {
+      api.setOrganization('another-organization')
+      return new Response(JSON.stringify({ file: { ...stored, state: 'pending' },
+        url: 'http://127.0.0.1:9000/miniapp-files', fields: { key: 'pending/test', policy: 'signed' } }))
+    }
+    if (calls.length === 2) return new Response(null, { status: 204 })
+    return new Response(JSON.stringify(stored))
+  }
+  const result = await uploadFile(new File(['png'], 'photo.png', { type: 'image/png' }), 'original-organization')
+  assert.equal(result.id, id)
+  assert.equal(calls.length, 3)
+  assert.equal(calls[0].options.headers.get('X-Organization-ID'), 'original-organization')
+  assert.equal(calls[2].options.headers.get('X-Organization-ID'), 'original-organization')
+  assert.equal(calls[1].options.credentials, 'omit')
+  assert.equal(calls[1].options.headers, undefined)
+  assert.ok(calls[1].options.body instanceof FormData)
+  assert.deepEqual([...calls[1].options.body.keys()], ['key', 'policy', 'file'])
+  assert.equal(calls[2].url, `/api/organization/files/${id}/complete`)
+})

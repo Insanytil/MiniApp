@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://127.0.0.1:6379/0"
     celery_result_backend: str = "redis://127.0.0.1:6379/1"
 
+    s3_endpoint_url: str = "http://127.0.0.1:9000"
+    s3_public_endpoint_url: str = "http://127.0.0.1:9000"
+    s3_region: str = "us-east-1"
+    s3_bucket: str = "miniapp-files"
+    s3_access_key: str = "miniapp-local"
+    s3_secret_key: SecretStr = SecretStr("change-me-minio-local-only")
+    s3_url_lifetime_seconds: PositiveInt = 300
+    s3_max_file_bytes: PositiveInt = 20 * 1024 * 1024
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

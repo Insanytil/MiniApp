@@ -6,11 +6,20 @@ from sqlalchemy.orm import aliased
 from app.models.entity_record import EntityRecord, EntityRecordLink
 from app.models.entity_type import EntityType
 from app.models.organization import Organization
+from app.models.stored_file import StoredFile
 
 
 class EntityRecordRepository:
     def __init__(self, db):
         self.db = db
+
+    async def image_files(self, organization_id, ids):
+        # Lock until record commit so deletion cannot race with attachment.
+        return set((await self.db.scalars(select(StoredFile.id).where(
+            StoredFile.organization_id == organization_id, StoredFile.id.in_(ids),
+            StoredFile.state == 'ready', StoredFile.content_type.in_(
+                ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'])
+        ).order_by(StoredFile.id).with_for_update())).all())
 
     async def catalog(self, organization_id):
         return list((await self.db.scalars(select(EntityType).where(EntityType.organization_id == organization_id))).all())

@@ -5,8 +5,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useAuth } from '@/features/auth'
+import { getFileDownload } from '@/features/files/api'
 import { ChoiceBadges } from '@/features/entity-types/components/choice-badges'
 import {
+  imageFileId,
   recordInitials,
   safeImageUrl,
 } from '@/features/entity-types/presentation'
@@ -47,12 +51,28 @@ export function RecordImage({
   url,
   initials = '',
   variant = 'table',
+  organizationId,
 }: {
   url: string | null
+  organizationId?: string
   initials?: string
   variant?: 'table' | 'detail' | 'avatar'
 }) {
-  const safe = safeImageUrl(url)
+  const { organization } = useAuth()
+  const scopeId = organizationId ?? organization?.id
+  const fileId = imageFileId(url)
+  const signed = useQuery({
+    queryKey: ['organization', scopeId, 'file-preview', fileId],
+    enabled: !!fileId && !!scopeId,
+    queryFn: () => getFileDownload(fileId!, scopeId!, true),
+    staleTime: 0,
+    refetchInterval: (query) =>
+      query.state.data
+        ? Math.max(1000, query.state.data.expires_in * 800)
+        : false,
+    retry: false,
+  })
+  const safe = fileId ? (signed.data?.url ?? null) : safeImageUrl(url)
   const [failed, setFailed] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
   const available = !!safe && safe !== failed

@@ -1,7 +1,18 @@
 import type { DisplayProfile } from './configuration'
 
+export function imageFileId(value: unknown): string | null {
+  return typeof value === 'string' &&
+    /^file:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      value,
+    )
+    ? value.slice(5).toLowerCase()
+    : null
+}
+
 export function safeImageUrl(value: unknown): string | null {
   if (typeof value !== 'string') return null
+  const fileId = imageFileId(value)
+  if (fileId) return `file:${fileId}`
   if (value.startsWith('/')) {
     try {
       const url = new URL(value, 'https://preview.invalid')

@@ -26,6 +26,8 @@ def scalar_text(value):
 def safe_image(value):
     if not isinstance(value, str) or re.search(r'[\x00-\x20\\]', value):
         return None
+    if re.fullmatch(r'file:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}', value):
+        return value.lower()
     if value.startswith('/'):
         return value if not value.startswith('//') else None
     try:

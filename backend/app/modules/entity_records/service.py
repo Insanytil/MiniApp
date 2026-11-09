@@ -21,6 +21,18 @@ class EntityRecordService:
     def __init__(self, repository):
         self.repository = repository
 
+    async def validate_image_files(self, organization_id, fields, values):
+        references = {field['id']: uuid.UUID(values[field['id']][5:]) for field in fields
+                      if field['kind'] == 'image' and isinstance(values.get(field['id']), str)
+                      and values[field['id']].startswith('file:')}
+        if not references:
+            return
+        files = await self.repository.image_files(organization_id, set(references.values()))
+        issues = [{'field': field_id, 'message': 'Cette image est indisponible ou ne fait pas partie de cette organisation.'}
+                  for field_id, file_id in references.items() if file_id not in files]
+        if issues:
+            raise RecordValidationError(issues)
+
     async def list_records(self, organization_id, entity_type_id, params):
         catalog = {str(item.id): item for item in await self.repository.catalog(organization_id)}
         entity_type = catalog.get(str(entity_type_id))
@@ -110,6 +122,7 @@ class EntityRecordService:
         if entity_type.configuration_version != payload.expected_configuration_version:
             raise RecordSchemaConflictError()
         values = validate_values(entity_type.configuration['fields'], {str(key): value for key, value in payload.values.items()})
+        await self.validate_image_files(organization_id, entity_type.configuration['fields'], values)
         assignments = [item.model_dump(mode='json') for item in payload.relations]
         ids = {uuid.UUID(identity) for assignment in assignments for identity in assignment['record_ids']}
         related = await self.repository.get_records(organization_id, ids)
@@ -179,6 +192,7 @@ class EntityRecordService:
         if record.updated_at != payload.expected_updated_at:
             raise RecordConflictError()
         values = validate_values(entity_type.configuration['fields'], {str(key): value for key, value in payload.values.items()})
+        await self.validate_image_files(organization_id, entity_type.configuration['fields'], values)
         assignments = [item.model_dump(mode='json') for item in payload.relations]
         old_edges = await self.repository.record_edges(organization_id, record_id)
         for assignment in assignments:
