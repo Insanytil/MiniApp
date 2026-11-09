@@ -120,55 +120,32 @@ AccountSettingsServiceDep = Annotated[
     Depends(get_account_settings_service),
 ]
 
-async def get_authenticated_session(
-    session_token: str | None = Security(
-        session_cookie_scheme,
-    ),
-    auth_service: AuthService = Depends(get_auth_service),
+async def _authenticate_session(
+    session_token: str | None, auth_service: AuthService,
 ) -> AuthenticatedSession:
     if session_token is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-    )
-
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     try:
-        return await auth_service.authenticate_session(
-            session_token,
-        )
+        return await auth_service.authenticate_session(session_token)
     except InvalidSessionError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-        ) from None
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required") from None
+
+
+async def get_authenticated_session(
+    session_token: str | None = Security(session_cookie_scheme),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> AuthenticatedSession:
+    return await _authenticate_session(session_token, auth_service)
 
 
 async def get_event_authenticated_session(
     session_token: str | None = Security(session_cookie_scheme),
     session: AsyncSession = Depends(get_async_session, scope="function"),
 ) -> AuthenticatedSession:
-    if session_token is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-        )
-
+    # SSE authorization uses a short-lived session, released before streaming.
     user_db = SQLAlchemyUserDatabase(session, User)
-    auth_service = AuthService(
-        db=session,
-        user_manager=UserManager(user_db),
-        session_repository=AuthSessionRepository(session),
-        session_lifetime=timedelta(
-            hours=settings.auth_session_lifetime_hours,
-        ),
-    )
-    try:
-        return await auth_service.authenticate_session(session_token)
-    except InvalidSessionError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-        ) from None
+    auth_service = await get_auth_service(session, UserManager(user_db))
+    return await _authenticate_session(session_token, auth_service)
 
 
 EventAuthenticatedSessionDep = Annotated[

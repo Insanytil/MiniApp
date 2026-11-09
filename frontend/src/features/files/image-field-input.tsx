@@ -3,7 +3,7 @@ import { LoaderCircle, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ApiError, errorMessage } from '@/lib/api/client'
-import { RecordImage } from '@/features/entity-records/components/record-cell'
+import { RecordImage } from '@/features/files/record-image'
 import { imageFileId } from '@/features/entity-types/presentation'
 import { uploadFile } from './api'
 

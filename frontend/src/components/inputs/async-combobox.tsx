@@ -202,7 +202,7 @@ export function AsyncCombobox({
                 {emptyMessage}
               </p>
             )}
-            {!busy && query.data?.hasMore && (
+            {!busy && query.data.hasMore && (
               <p className="border-t px-3 py-2 text-xs text-muted-foreground">
                 Affinez votre recherche pour voir d’autres résultats.
               </p>

@@ -188,16 +188,7 @@ class PlatformUserAdministrationService:
         if user.is_verified:
             raise UserAlreadyVerifiedError()
 
-        job = self.job_service.create_email_job(
-            job_type=BackgroundJobType.ACCOUNT_VERIFICATION_EMAIL,
-            recipient_email=user.email,
-            subject_user_id=user.id,
-            organization_id=None,
-            triggered_by_user_id=triggered_by_user_id,
-        )
-        await self.db.flush()
-        await self.db.commit()
-        return await self.job_service.dispatch(job)
+        return await self._queue_user_email(user, BackgroundJobType.ACCOUNT_VERIFICATION_EMAIL, triggered_by_user_id)
 
     async def send_password_reset_email(
         self,
@@ -209,12 +200,17 @@ class PlatformUserAdministrationService:
         if not user.is_verified:
             raise UserNotVerifiedError()
 
+        return await self._queue_user_email(user, BackgroundJobType.PASSWORD_RESET_EMAIL, triggered_by_user_id)
+
+    async def _queue_user_email(
+        self, user: User, job_type: BackgroundJobType, actor_id: uuid.UUID,
+    ) -> bool:
         job = self.job_service.create_email_job(
-            job_type=BackgroundJobType.PASSWORD_RESET_EMAIL,
+            job_type=job_type,
             recipient_email=user.email,
             subject_user_id=user.id,
             organization_id=None,
-            triggered_by_user_id=triggered_by_user_id,
+            triggered_by_user_id=actor_id,
         )
         await self.db.flush()
         await self.db.commit()

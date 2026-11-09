@@ -59,7 +59,6 @@ function LoadMenu({ organizationId }: { organizationId: string }) {
         </AlertDescription>
       </Alert>
     )
-  if (!query.data) return null
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       {query.isError && (

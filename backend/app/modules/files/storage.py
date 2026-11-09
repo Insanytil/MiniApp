@@ -3,6 +3,7 @@ from urllib.parse import quote
 import boto3
 from botocore.config import Config
 from app.core.config import settings
+from app.modules.files.policy import signed_url_lifetime
 
 
 class S3Storage:
@@ -22,7 +23,7 @@ class S3Storage:
             Bucket=settings.s3_bucket, Key="pending/" + key,
             Fields={"Content-Type": content_type},
             Conditions=[{"Content-Type": content_type}, ["content-length-range", size, size]],
-            ExpiresIn=min(settings.s3_url_lifetime_seconds, 3600),
+            ExpiresIn=signed_url_lifetime(settings.s3_url_lifetime_seconds),
         )
 
     def finalize(self, key: str, content_type: str, size: int):
@@ -42,7 +43,7 @@ class S3Storage:
         return self.signer.generate_presigned_url(
             "get_object", Params={"Bucket": settings.s3_bucket, "Key": key,
             "ResponseContentDisposition": ("inline" if inline else "attachment") + "; filename*=UTF-8''" + quote(filename, safe="")},
-            ExpiresIn=min(settings.s3_url_lifetime_seconds, 3600),
+            ExpiresIn=signed_url_lifetime(settings.s3_url_lifetime_seconds),
         )
 
     def delete(self, key: str):
@@ -51,5 +52,5 @@ class S3Storage:
 
 
 @lru_cache
-def get_storage():
+def get_storage() -> S3Storage:
     return S3Storage()

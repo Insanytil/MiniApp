@@ -27,11 +27,12 @@ export function OrganizationUserCreateSheet({
   onClose: () => void
 }) {
   const mutation = useCreateOrganizationUser(organization.id)
+  const initialValues: OrganizationUserInput = {
+    email: '',
+    role: 'organization_user',
+  }
   const form = useForm({
-    defaultValues: {
-      email: '',
-      role: 'organization_user',
-    } as OrganizationUserInput,
+    defaultValues: initialValues,
     validators: {
       onChange: organizationUserSchema,
       onSubmit: organizationUserSchema,

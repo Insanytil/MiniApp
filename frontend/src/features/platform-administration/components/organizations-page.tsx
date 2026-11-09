@@ -1,5 +1,5 @@
 import { toast } from '@/components/ui/toast'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import {
   Building2,
@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { ServerTable } from '@/components/data-table/server-table'
 import type { ServerColumn } from '@/components/data-table/server-table'
-import { lastAvailablePage } from '@/components/data-table/server-pagination'
+import { useListPageBoundary } from '@/components/data-table/use-list-page-boundary'
 import { useServerList } from '@/components/data-table/use-server-list'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -48,12 +48,7 @@ export function OrganizationsPage() {
   const [dialog, setDialog] = useState<DialogState | null>(null)
   const [memberOrganization, setMemberOrganization] =
     useState<Organization | null>(null)
-  useEffect(() => {
-    if (!query.data || query.isPlaceholderData) return
-    const max = lastAvailablePage(query.data.pagination.total_pages)
-    if (list.params.page > max)
-      list.setParams((previous) => ({ ...previous, page: max }))
-  }, [query.data, query.isPlaceholderData, list.params.page, list.setParams])
+  useListPageBoundary(query, list)
 
   const columns = useMemo<ServerColumn<OrganizationListItem>[]>(
     () => [

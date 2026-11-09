@@ -29,12 +29,13 @@ export function UserFormSheet({
 }) {
   const mutation = useCreateUser()
   const [selected, setSelected] = useState<AsyncOption | null>(null)
+  const initialValues: UserInput = {
+    email: '',
+    organizationId: '',
+    role: 'organization_user',
+  }
   const form = useForm({
-    defaultValues: {
-      email: '',
-      organizationId: '',
-      role: 'organization_user',
-    } as UserInput,
+    defaultValues: initialValues,
     validators: { onChange: userSchema, onSubmit: userSchema },
     onSubmit: async ({ value }) => {
       try {

@@ -1,41 +1,27 @@
+import { DetailSheet } from './record-detail-sheet'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import {
-  Eye,
-  Plus,
-  Pencil,
-  MoreHorizontal,
-  Trash2,
-  ChevronDown,
-} from 'lucide-react'
+import { Eye, Plus, Pencil, MoreHorizontal, Trash2 } from 'lucide-react'
 import { useAuth } from '@/features/auth'
-import { ChoiceBadges } from '@/features/entity-types/components/choice-badges'
 import { ServerTable } from '@/components/data-table/server-table'
 import type { ServerColumn } from '@/components/data-table/server-table'
-import { lastAvailablePage } from '@/components/data-table/server-pagination'
+import { useListPageBoundary } from '@/components/data-table/use-list-page-boundary'
 import { useServerList } from '@/components/data-table/use-server-list'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
 import { errorMessage } from '@/lib/api/client'
-import { deleteRecord, recordDetailQuery, recordsQuery } from '../records'
+import { deleteRecord, recordsQuery } from '../records'
 import { createRecordError, recordRootKey } from '../creation'
 import {
   AlertDialog,
@@ -45,9 +31,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import type { EntityRecordRow, RecordDetail } from '../records'
+import type { EntityRecordRow } from '../records'
 import { RecordCreateSheet } from './record-create-sheet'
-import { formatValue, RecordCell, RecordImage } from './record-cell'
+import { RecordCell } from './record-cell'
 
 const emptyRows: EntityRecordRow[] = []
 export function EntityRecordsPage({ entityTypeId }: { entityTypeId: string }) {
@@ -90,11 +76,7 @@ function ScopedRecords({
       })
     },
   })
-  useEffect(() => {
-    if (!query.data || query.isPlaceholderData) return
-    const max = lastAvailablePage(query.data.pagination.total_pages)
-    if (list.params.page > max) list.setParams((p) => ({ ...p, page: max }))
-  }, [query.data, query.isPlaceholderData, list.params.page, list.setParams])
+  useListPageBoundary(query, list)
   const columns = useMemo<ServerColumn<EntityRecordRow>[]>(
     () =>
       (query.data?.view.columns ?? []).map((column) => ({
@@ -285,118 +267,6 @@ function ScopedRecords({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  )
-}
-export function DetailSheet({
-  organizationId,
-  entityTypeId,
-  recordId,
-  onClose,
-}: {
-  organizationId: string
-  entityTypeId: string
-  recordId: string
-  onClose: () => void
-}) {
-  const query = useQuery(
-    recordDetailQuery(organizationId, entityTypeId, recordId),
-  )
-  return (
-    <Sheet
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose()
-      }}
-    >
-      <SheetContent className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
-        <SheetHeader className="shrink-0 border-b p-6 pr-14">
-          <SheetTitle>Détails de l’enregistrement</SheetTitle>
-          <SheetDescription>
-            {query.data?.entity_type_name ?? recordId}
-          </SheetDescription>
-        </SheetHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
-          {query.isPending ? (
-            <p role="status">Chargement…</p>
-          ) : query.isError ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                {errorMessage(query.error)}{' '}
-                <Button variant="outline" onClick={() => void query.refetch()}>
-                  Réessayer
-                </Button>
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="space-y-6">
-              <dl className="space-y-5">
-                {query.data.fields
-                  .filter((field) => !field.system)
-                  .map((field) => (
-                    <DetailField
-                      key={field.id}
-                      field={field}
-                      organizationId={organizationId}
-                    />
-                  ))}
-              </dl>
-              {query.data.fields.some((field) => field.system) && (
-                <details
-                  key={recordId}
-                  className="group rounded-lg border bg-muted/20"
-                >
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-4 py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
-                    Informations de suivi
-                    <ChevronDown
-                      aria-hidden="true"
-                      className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
-                    />
-                  </summary>
-                  <dl className="space-y-4 border-t px-4 py-4">
-                    {query.data.fields
-                      .filter((field) => field.system)
-                      .map((field) => (
-                        <DetailField
-                          key={field.id}
-                          field={field}
-                          organizationId={organizationId}
-                        />
-                      ))}
-                  </dl>
-                </details>
-              )}
-            </div>
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
-  )
-}
-
-function DetailField({
-  field,
-  organizationId,
-}: {
-  field: RecordDetail['fields'][number]
-  organizationId: string
-}) {
-  return (
-    <div>
-      <dt className="mb-1 text-xs text-muted-foreground">{field.name}</dt>
-      <dd className="text-sm whitespace-pre-wrap break-words">
-        {field.choice_options ? (
-          <ChoiceBadges options={field.choice_options} />
-        ) : field.kind === 'image' ? (
-          <RecordImage
-            variant="detail"
-            organizationId={organizationId}
-            url={typeof field.value === 'string' ? field.value : null}
-          />
-        ) : (
-          formatValue(field.display_value ?? field.value, field.kind)
-        )}
-      </dd>
     </div>
   )
 }

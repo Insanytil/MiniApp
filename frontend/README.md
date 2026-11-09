@@ -152,3 +152,18 @@ npm run generate-routes
 npx tsc --noEmit
 npm run build
 ```
+
+## Vérifications
+
+Avec les dépendances déjà installées :
+
+```powershell
+npm run verify
+npm run build
+```
+
+`verify` exécute TypeScript, ESLint sur les sources (sans avertissement accepté),
+puis les tests. Les composants de champs et de détail des fiches sont séparés du
+formulaire et du tableau. Les aperçus d'images sont dans `features/files` et la
+correction des pages après suppression est partagée dans
+`components/data-table/use-list-page-boundary.ts`.

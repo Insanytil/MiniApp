@@ -58,15 +58,14 @@ export function useOrganizationPasswordReset(organizationId: string) {
       }),
     }),
     onSuccess: (result, user, context) => {
-      if (context)
-        toast.update(context.toastId, {
-          title: result.queued
-            ? 'Email de réinitialisation mis en file'
-            : 'L’email n’a pas pu être mis en file',
-          description: user.email,
-          type: result.queued ? 'success' : 'warning',
-          timeout: result.queued ? 4500 : 0,
-        })
+      toast.update(context.toastId, {
+        title: result.queued
+          ? 'Email de réinitialisation mis en file'
+          : 'L’email n’a pas pu être mis en file',
+        description: user.email,
+        type: result.queued ? 'success' : 'warning',
+        timeout: result.queued ? 4500 : 0,
+      })
     },
     onError: (error, user, context) => {
       if (context)

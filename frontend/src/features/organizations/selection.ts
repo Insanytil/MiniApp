@@ -1,4 +1,4 @@
-import type { CurrentUser } from '@/features/auth/session'
+import type { CurrentUser, UserOrganization } from '@/features/auth/session'
 
 const storageKey = 'miniapp.active-organization'
 
@@ -47,13 +47,13 @@ export function clearOrganizationSelection() {
 export function resolveOrganization(
   user: CurrentUser,
   selectedId: string | null,
-) {
+): UserOrganization | null {
   return (
     user.organizations.find((organization) => organization.id === selectedId) ??
     user.organizations.find(
       (organization) => organization.id === user.default_organization_id,
     ) ??
-    user.organizations[0] ??
+    user.organizations.at(0) ??
     null
   )
 }

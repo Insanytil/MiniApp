@@ -41,7 +41,7 @@ function ScopedMenu({
         </Button>
       </div>
     )
-  return query.data?.resolved_nodes.length ? (
+  return query.data.resolved_nodes.length ? (
     <ul
       className="mt-3 space-y-1 border-t pt-3"
       aria-label="Menu de l’organisation"

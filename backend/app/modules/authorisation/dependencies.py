@@ -1,5 +1,4 @@
 import uuid
-from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Query, status
@@ -17,6 +16,7 @@ from app.modules.auth.dependencies import (
     EventAuthenticatedSessionDep,
 )
 from app.modules.auth.services.auth_service import AuthenticatedSession
+from app.modules.authorisation.scope import OrganizationScope
 
 
 async def require_platform_admin(
@@ -59,13 +59,6 @@ Raises:
 Returns:
     User: The resolved platform administrator user.
 """
-
-
-@dataclass(frozen=True, slots=True)
-class OrganizationScope:
-    organization: Organization
-    user: User
-    role: OrganizationRole | None
 
 
 async def _resolve_organization_scope(

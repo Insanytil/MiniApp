@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { ServerTable } from '@/components/data-table/server-table'
 import type { ServerColumn } from '@/components/data-table/server-table'
-import { lastAvailablePage } from '@/components/data-table/server-pagination'
+import { useListPageBoundary } from '@/components/data-table/use-list-page-boundary'
 import { useServerList } from '@/components/data-table/use-server-list'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -33,11 +33,7 @@ export function JobsPage({
   })
   const [selected, setSelected] = useState<JobGroup | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
-  useEffect(() => {
-    if (!query.data || query.isPlaceholderData) return
-    const max = lastAvailablePage(query.data.pagination.total_pages)
-    if (list.params.page > max) list.setParams((p) => ({ ...p, page: max }))
-  }, [query.data, query.isPlaceholderData, list.params.page, list.setParams])
+  useListPageBoundary(query, list)
   const columns = useMemo<ServerColumn<JobGroup>[]>(
     () => [
       {

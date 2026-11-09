@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import {
@@ -13,7 +13,7 @@ import { useAuth } from '@/features/auth'
 import type { UserOrganization } from '@/features/auth'
 import { ServerTable } from '@/components/data-table/server-table'
 import type { ServerColumn } from '@/components/data-table/server-table'
-import { lastAvailablePage } from '@/components/data-table/server-pagination'
+import { useListPageBoundary } from '@/components/data-table/use-list-page-boundary'
 import { useServerList } from '@/components/data-table/use-server-list'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -59,11 +59,7 @@ function ScopedEntityTypesPage({
   const [form, setForm] = useState<{ entityType?: EntityType } | null>(null)
   const [deleting, setDeleting] = useState<EntityType | null>(null)
   const remove = useDeleteEntityType(organization.id)
-  useEffect(() => {
-    if (!query.data || query.isPlaceholderData) return
-    const max = lastAvailablePage(query.data.pagination.total_pages)
-    if (list.params.page > max) list.setParams((p) => ({ ...p, page: max }))
-  }, [query.data, query.isPlaceholderData, list.params.page, list.setParams])
+  useListPageBoundary(query, list)
   const columns = useMemo<ServerColumn<EntityType>[]>(
     () => [
       {

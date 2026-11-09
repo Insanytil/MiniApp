@@ -10,7 +10,6 @@ from app.models.auth_session import AuthSession
 from app.models.user_invitation import UserInvitation
 __all__ = [
     "StoredFile",
-    "BusinessPage",
     "EntityRecord", "EntityRecordLink",
     "EntityType",
     "AuthSession",

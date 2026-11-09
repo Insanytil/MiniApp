@@ -25,7 +25,6 @@ export function useUserEmail() {
       }),
     }),
     onSuccess: (result, { user, action }, context) => {
-      if (!context) return
       toast.update(context.toastId, {
         title: result.queued
           ? userEmailActions[action].queued

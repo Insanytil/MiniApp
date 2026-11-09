@@ -201,7 +201,7 @@ export function PasswordLinkPage({
                 }}
               >
                 <p className="break-all rounded-lg bg-muted/60 px-3 py-2 text-sm">
-                  {link.data?.email}
+                  {link.data.email}
                 </p>
                 <form.Field name="password">
                   {(field) => {

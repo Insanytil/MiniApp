@@ -9,6 +9,7 @@ from app.models.organization import Organization
 from app.models.user import User
 from app.models.organization_membership import OrganizationMembership
 from app.models.stored_file import StoredFile
+from app.modules.files.policy import IMAGE_CONTENT_TYPES
 
 
 class EntityRecordRepository:
@@ -30,8 +31,7 @@ class EntityRecordRepository:
         # Lock until record commit so deletion cannot race with attachment.
         return set((await self.db.scalars(select(StoredFile.id).where(
             StoredFile.organization_id == organization_id, StoredFile.id.in_(ids),
-            StoredFile.state == 'ready', StoredFile.content_type.in_(
-                ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'])
+            StoredFile.state == 'ready', StoredFile.content_type.in_(IMAGE_CONTENT_TYPES)
         ).order_by(StoredFile.id).with_for_update())).all())
 
     async def catalog(self, organization_id):

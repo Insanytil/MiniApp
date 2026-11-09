@@ -10,8 +10,8 @@ from app.modules.files.schemas import UploadRequest
 
 HAS_BOTO3 = importlib.util.find_spec("boto3") is not None
 if HAS_BOTO3:
-    from fastapi import HTTPException
-    from app.modules.files.router import complete_upload, delete_file, scoped_file, create_upload
+    from app.modules.files.exceptions import FileError
+    from app.modules.files.service import FileService
     from app.modules.files.storage import S3Storage
 
 
@@ -42,9 +42,10 @@ class FileAuthorizationTests(unittest.IsolatedAsyncioTestCase):
         self.db = SimpleNamespace(scalar=AsyncMock(return_value=self.item),
             commit=AsyncMock(), refresh=AsyncMock(), add=Mock())
         self.storage = Mock()
+        self.service = FileService(self.db, self.storage)
 
     async def test_lookup_always_scopes_to_organization_and_excludes_deleted(self):
-        await scoped_file(self.db, self.org, self.item.id, lock=True)
+        await self.service.get_file(self.org, self.item.id, lock=True)
         query = self.db.scalar.await_args.args[0]
         sql = str(query)
         self.assertIn("stored_files.organization_id =", sql)
@@ -52,49 +53,49 @@ class FileAuthorizationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("FOR UPDATE", sql)
         self.assertIn(self.org, query.compile().params.values())
         self.db.scalar.return_value = None
-        with self.assertRaises(HTTPException) as error:
-            await scoped_file(self.db, self.org, self.item.id)
+        with self.assertRaises(FileError) as error:
+            await self.service.get_file(self.org, self.item.id)
         self.assertEqual(error.exception.status_code, 404)
 
     async def test_another_member_cannot_complete_or_delete(self):
         self.item.created_by = uuid.uuid4()
-        for action in (complete_upload, delete_file):
-            with self.assertRaises(HTTPException) as error:
-                await action(self.item.id, self.scope, self.db, self.storage)
+        for action in (self.service.complete_upload, self.service.delete_file):
+            with self.assertRaises(FileError) as error:
+                await action(self.item.id, self.scope)
             self.assertEqual(error.exception.status_code, 403)
         self.storage.finalize.assert_not_called()
         self.storage.delete.assert_not_called()
 
     async def test_completion_is_idempotent(self):
         self.item.state = "ready"
-        await complete_upload(self.item.id, self.scope, self.db, self.storage)
+        await self.service.complete_upload(self.item.id, self.scope)
         self.storage.finalize.assert_not_called()
 
     async def test_rejects_oversize_before_signing(self):
         payload = UploadRequest(filename="x", size_bytes=10**12)
-        with self.assertRaises(HTTPException) as error:
-            await create_upload(payload, self.scope, self.db, self.storage)
+        with self.assertRaises(FileError) as error:
+            await self.service.create_upload(payload, self.scope)
         self.assertEqual(error.exception.status_code, 413)
         self.storage.upload.assert_not_called()
 
     async def test_linked_file_cannot_be_deleted(self):
         self.db.scalar.side_effect = [self.item, uuid.uuid4()]
-        with self.assertRaises(HTTPException) as error:
-            await delete_file(self.item.id, self.scope, self.db, self.storage)
+        with self.assertRaises(FileError) as error:
+            await self.service.delete_file(self.item.id, self.scope)
         self.assertEqual(error.exception.status_code, 409)
         self.storage.delete.assert_not_called()
 
     async def test_unlinked_file_can_be_deleted(self):
         self.db.scalar.side_effect = [self.item, None]
-        await delete_file(self.item.id, self.scope, self.db, self.storage)
+        await self.service.delete_file(self.item.id, self.scope)
         self.storage.delete.assert_called_once_with(self.item.object_key)
         self.assertEqual(self.item.state, 'deleted')
         self.db.commit.assert_awaited_once()
 
     async def test_storage_failure_does_not_mark_ready(self):
         self.storage.finalize.side_effect = ValueError("mismatch")
-        with self.assertRaises(HTTPException):
-            await complete_upload(self.item.id, self.scope, self.db, self.storage)
+        with self.assertRaises(FileError):
+            await self.service.complete_upload(self.item.id, self.scope)
         self.assertEqual(self.item.state, "pending")
         self.db.commit.assert_not_awaited()
 
