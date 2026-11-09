@@ -11,7 +11,14 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { Eye, Plus, Pencil, MoreHorizontal, Trash2 } from 'lucide-react'
+import {
+  Eye,
+  Plus,
+  Pencil,
+  MoreHorizontal,
+  Trash2,
+  ChevronDown,
+} from 'lucide-react'
 import { useAuth } from '@/features/auth'
 import { ChoiceBadges } from '@/features/entity-types/components/choice-badges'
 import { ServerTable } from '@/components/data-table/server-table'
@@ -38,7 +45,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import type { EntityRecordRow } from '../records'
+import type { EntityRecordRow, RecordDetail } from '../records'
 import { RecordCreateSheet } from './record-create-sheet'
 import { formatValue, RecordCell, RecordImage } from './record-cell'
 
@@ -322,36 +329,74 @@ export function DetailSheet({
               </AlertDescription>
             </Alert>
           ) : (
-            <dl className="space-y-5">
-              {query.data.fields.map((field) => (
-                <div key={field.id}>
-                  <dt className="mb-1 text-xs text-muted-foreground">
-                    {field.name}
-                    {field.system ? ' · Système' : ''}
-                  </dt>
-                  <dd className="text-sm whitespace-pre-wrap break-words">
-                    {field.choice_options ? (
-                      <ChoiceBadges options={field.choice_options} />
-                    ) : field.kind === 'image' ? (
-                      <RecordImage
-                        variant="detail"
-                        url={
-                          typeof field.value === 'string' ? field.value : null
-                        }
-                      />
-                    ) : (
-                      formatValue(
-                        field.display_value ?? field.value,
-                        field.kind,
-                      )
-                    )}
-                  </dd>
-                </div>
-              ))}
-            </dl>
+            <div className="space-y-6">
+              <dl className="space-y-5">
+                {query.data.fields
+                  .filter((field) => !field.system)
+                  .map((field) => (
+                    <DetailField
+                      key={field.id}
+                      field={field}
+                      organizationId={organizationId}
+                    />
+                  ))}
+              </dl>
+              {query.data.fields.some((field) => field.system) && (
+                <details
+                  key={recordId}
+                  className="group rounded-lg border bg-muted/20"
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-4 py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+                    Informations de suivi
+                    <ChevronDown
+                      aria-hidden="true"
+                      className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+                    />
+                  </summary>
+                  <dl className="space-y-4 border-t px-4 py-4">
+                    {query.data.fields
+                      .filter((field) => field.system)
+                      .map((field) => (
+                        <DetailField
+                          key={field.id}
+                          field={field}
+                          organizationId={organizationId}
+                        />
+                      ))}
+                  </dl>
+                </details>
+              )}
+            </div>
           )}
         </div>
       </SheetContent>
     </Sheet>
+  )
+}
+
+function DetailField({
+  field,
+  organizationId,
+}: {
+  field: RecordDetail['fields'][number]
+  organizationId: string
+}) {
+  return (
+    <div>
+      <dt className="mb-1 text-xs text-muted-foreground">{field.name}</dt>
+      <dd className="text-sm whitespace-pre-wrap break-words">
+        {field.choice_options ? (
+          <ChoiceBadges options={field.choice_options} />
+        ) : field.kind === 'image' ? (
+          <RecordImage
+            variant="detail"
+            organizationId={organizationId}
+            url={typeof field.value === 'string' ? field.value : null}
+          />
+        ) : (
+          formatValue(field.display_value ?? field.value, field.kind)
+        )}
+      </dd>
+    </div>
   )
 }

@@ -187,3 +187,24 @@ fichiers de l'organisation.
 
 Les tableaux, détails et profils d'affichage demandent une URL signée à partir de
 cette référence et la renouvellent avant son expiration.
+
+## Profils utilisateur par organisation
+
+Les prénom et nom sont stockés sur `organization_memberships`, indépendamment du
+compte global. Un administrateur les modifie via **Utilisateurs → Actions → Modifier
+le profil**. L'API correspondante est `PUT /organization/users/{user_id}/profile`,
+avec `{first_name, last_name}`, la session, le jeton CSRF et `X-Organization-ID`.
+Les deux valeurs sont requises dans la requête et peuvent être vides pour revenir
+à l'affichage de l'email. Elles sont limitées à 100 caractères et nettoyées des
+espaces en début et fin.
+
+Les détails présentent d'abord les champs métier puis les champs système. Les
+auteurs sont affichés avec leur prénom et nom dans cette organisation, sinon leur
+email. Les UUID restent les valeurs stockées et les valeurs brutes de l'API ;
+`display_value` fournit leur libellé dans le détail. Les tableaux et profils
+d'affichage utilisent le même libellé. Un auteur sans appartenance dans
+l'organisation (par exemple un administrateur de plateforme) utilise son email.
+Les membres suspendus conservent leur nom dans l'historique.
+
+Appliquer la migration `c92f15a7b301` depuis `backend` après synchronisation des
+dépendances par le développeur : `uv run --no-sync alembic upgrade head`.

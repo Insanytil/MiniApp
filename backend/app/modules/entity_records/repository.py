@@ -6,12 +6,25 @@ from sqlalchemy.orm import aliased
 from app.models.entity_record import EntityRecord, EntityRecordLink
 from app.models.entity_type import EntityType
 from app.models.organization import Organization
+from app.models.user import User
+from app.models.organization_membership import OrganizationMembership
 from app.models.stored_file import StoredFile
 
 
 class EntityRecordRepository:
     def __init__(self, db):
         self.db = db
+
+    async def actor_labels(self, organization_id, user_ids):
+        if not user_ids:
+            return {}
+        rows = await self.db.execute(select(User.id, User.email,
+            OrganizationMembership.first_name, OrganizationMembership.last_name).outerjoin(
+                OrganizationMembership, and_(OrganizationMembership.user_id == User.id,
+                                              OrganizationMembership.organization_id == organization_id)
+            ).where(User.id.in_(user_ids)))
+        return {str(user_id): " ".join(part for part in (first_name, last_name) if part) or email
+                for user_id, email, first_name, last_name in rows.all()}
 
     async def image_files(self, organization_id, ids):
         # Lock until record commit so deletion cannot race with attachment.

@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
+    String,
     Enum as SqlEnum,
     ForeignKey,
     Index,
@@ -34,6 +35,9 @@ class OrganizationMembership(BaseEntity):
             "organization_id",
         ),
     )
+
+    first_name: Mapped[str] = mapped_column(String(100), nullable=False, default="", server_default="")
+    last_name: Mapped[str] = mapped_column(String(100), nullable=False, default="", server_default="")
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey(

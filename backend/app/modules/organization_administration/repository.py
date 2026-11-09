@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import String, func, select, type_coerce
+from sqlalchemy import String, func, select, type_coerce, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.organization_membership import OrganizationMembership
@@ -29,9 +29,9 @@ class OrganizationUserRepository:
         statement = self._members(organization_id)
         if search and search.strip():
             statement = statement.where(
-                type_coerce(func.lower(User.email), String).contains(
-                    search.strip().lower(), autoescape=True,
-                )
+                or_(*[type_coerce(func.lower(column), String).contains(search.strip().lower(), autoescape=True)
+                      for column in (User.email, OrganizationMembership.first_name, OrganizationMembership.last_name,
+                                     OrganizationMembership.first_name + " " + OrganizationMembership.last_name)])
             )
         total = await self.db.scalar(select(func.count()).select_from(statement.subquery()))
         rows = await self.db.execute(

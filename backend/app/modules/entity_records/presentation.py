@@ -5,11 +5,13 @@ from urllib.parse import urlsplit
 from app.modules.entity_types.configuration_rules import system_fields
 
 
-def record_values(record):
+def record_values(record, actor_labels=None):
     values = dict(record.values)
     attributes = {field['technical_name']: field['id'] for field in system_fields(record.entity_type_id)}
     for name, identity in attributes.items():
         value = getattr(record, name)
+        if actor_labels is not None and name in ('created_by', 'updated_by') and value is not None:
+            value = actor_labels.get(str(value), 'Utilisateur indisponible')
         # System values always override JSON supplied values.
         values[identity] = value.isoformat() if hasattr(value, 'isoformat') else str(value) if value is not None else None
     return values
@@ -49,11 +51,11 @@ def field_text(field, value):
     return scalar_text(value)
 
 
-def present_record(record, entity_type, profile_id=None):
+def present_record(record, entity_type, profile_id=None, actor_labels=None):
     profiles = entity_type.configuration['display_profiles']
     profile = next((p for p in profiles if p['id'] == profile_id), None) if profile_id else None
     profile = profile or next((p for p in profiles if p['is_default']), None)
-    values = record_values(record)
+    values = record_values(record, actor_labels)
     fields = {field['id']: field for field in entity_type.configuration['fields']}
     def compose(ids):
         return profile['separator'].join(text for identity in ids
@@ -79,11 +81,11 @@ def default_view(entity_type):
     ]}
 
 
-def project_rows(records, entity_type, view, catalog, paths, link_groups, related):
+def project_rows(records, entity_type, view, catalog, paths, link_groups, related, actor_labels=None):
     fields = {field['id']: field for field in system_fields(entity_type.id) + entity_type.configuration['fields']}
     output = []
     for record in records:
-        values = record_values(record)
+        values = record_values(record, actor_labels)
         cells = {}
         for column in view['columns']:
             kind = column['kind']
@@ -95,7 +97,7 @@ def project_rows(records, entity_type, view, catalog, paths, link_groups, relate
                 if field and field['kind'] == 'choice':
                     cells[column['id']]['choice_options'] = selected_options(field, value)
             elif kind == 'display':
-                cells[column['id']] = {'kind': 'records', 'items': [present_record(record, entity_type, column['profile_id'])], 'total': 1}
+                cells[column['id']] = {'kind': 'records', 'items': [present_record(record, entity_type, column['profile_id'], actor_labels)], 'total': 1}
             else:
                 key = (str(record.id), column['relation_id'], column['direction'])
                 group = link_groups.get(key, {'ids': [], 'total': 0})
@@ -105,7 +107,7 @@ def project_rows(records, entity_type, view, catalog, paths, link_groups, relate
                 path = paths.get((column['relation_id'], column['direction']))
                 cap = 1 if column['collection_display'] == 'first' else 3
                 linked = [related[identity] for identity in group['ids'] if identity in related][:cap]
-                items = [present_record(item, catalog[str(item.entity_type_id)], column['profile_id'])
+                items = [present_record(item, catalog[str(item.entity_type_id)], column['profile_id'], actor_labels)
                          for item in linked if path and str(item.entity_type_id) in path['type_ids'] and str(item.entity_type_id) in catalog]
                 cells[column['id']] = {'kind': 'records', 'items': items, 'total': group['total']}
         output.append({'id': str(record.id), 'cells': cells})

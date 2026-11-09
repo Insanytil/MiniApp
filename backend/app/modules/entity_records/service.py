@@ -21,6 +21,10 @@ class EntityRecordService:
     def __init__(self, repository):
         self.repository = repository
 
+    async def actor_labels(self, organization_id, records):
+        ids = {actor for record in records for actor in (record.created_by, record.updated_by) if actor is not None}
+        return await self.repository.actor_labels(organization_id, ids) if ids else {}
+
     async def validate_image_files(self, organization_id, fields, values):
         references = {field['id']: uuid.UUID(values[field['id']][5:]) for field in fields
                       if field['kind'] == 'image' and isinstance(values.get(field['id']), str)
@@ -47,10 +51,11 @@ class EntityRecordService:
         needed = {(column['relation_id'], column['direction']) for column in view['columns'] if column['kind'] in ('relation', 'count')}
         groups, related = await self.repository.related_groups(organization_id, [record.id for record in records],
                                                                [paths[key] for key in needed if key in paths])
+        actors = await self.actor_labels(organization_id, [*records, *related.values()])
         return {
             'entity_type': {'id': entity_type.id, 'name': entity_type.name, 'technical_name': entity_type.technical_name},
             'view': {'id': view['id'], 'name': view['name'], 'columns': [{'id': c['id'], 'label': c['label']} for c in view['columns']]},
-            'items': project_rows(records, entity_type, view, catalog, paths, groups, related),
+            'items': project_rows(records, entity_type, view, catalog, paths, groups, related, actors),
             'pagination': {'page': params.page, 'page_size': params.page_size, 'total': total,
                            'total_pages': (total + params.page_size - 1) // params.page_size},
         }
@@ -64,12 +69,18 @@ class EntityRecordService:
         if record is None:
             raise EntityRecordNotFoundError()
         values = record_values(record)
-        return {'id': record.id, 'entity_type_name': entity_type.name,
-                'fields': [{**field, 'value': values.get(field['id']),
-                            **({'display_value': field_text(field, values.get(field['id'])),
-                                'choice_options': selected_options(field, values.get(field['id']))}
-                               if field['kind'] == 'choice' else {})}
-                           for field in all_fields(entity_type.id, entity_type.configuration)]}
+        actors = await self.actor_labels(organization_id, [record])
+        displayed_values = record_values(record, actors)
+        fields = []
+        for field in sorted(all_fields(entity_type.id, entity_type.configuration), key=lambda field: bool(field.get('system'))):
+            item = {**field, 'value': values.get(field['id'])}
+            if field['kind'] == 'choice':
+                item.update(display_value=field_text(field, item['value']),
+                            choice_options=selected_options(field, item['value']))
+            elif field.get('system') and field['technical_name'] in ('created_by', 'updated_by'):
+                item['display_value'] = displayed_values.get(field['id'])
+            fields.append(item)
+        return {'id': record.id, 'entity_type_name': entity_type.name, 'fields': fields}
 
     async def delete(self, organization_id, entity_type_id, record_id, actor_id):
         await self.repository.lock_writes(organization_id)
@@ -152,7 +163,8 @@ class EntityRecordService:
             raise RecordValidationError([{'field': None, 'message': 'Cette relation n’est pas accessible depuis ce type.'}])
         relation = relation_catalog(configurations)[path['id']][1]
         records, total = await self.repository.relation_options(organization_id, path, relation, params)
-        return {'items': [present_record(record, catalog[str(record.entity_type_id)]) for record in records],
+        actors = await self.actor_labels(organization_id, records)
+        return {'items': [present_record(record, catalog[str(record.entity_type_id)], actor_labels=actors) for record in records],
                 'pagination': {'page': params.page, 'page_size': params.page_size, 'total': total,
                                'total_pages': (total + params.page_size - 1) // params.page_size}}
 
@@ -167,12 +179,13 @@ class EntityRecordService:
         ids = {uuid.UUID(identity) for _, source, target in edges for identity in (source, target)}
         related = await self.repository.get_records(organization_id, ids)
         catalog = {str(item.id): item for item in await self.repository.catalog(organization_id)}
+        actors = await self.actor_labels(organization_id, list(related.values()))
         selections = {}
         for path in schema['relations']:
             identities = {target if path['direction'] == 'outgoing' else source for relation, source, target in edges
                 if relation == path['id'] and (source if path['direction'] == 'outgoing' else target) == str(record_id)}
             selections[f"relation:{path['id']}:{path['direction']}"] = [
-                {'value': identity, 'label': present_record(related[identity], catalog[str(related[identity].entity_type_id)])['title']}
+                {'value': identity, 'label': present_record(related[identity], catalog[str(related[identity].entity_type_id)], actor_labels=actors)['title']}
                 for identity in sorted(identities) if identity in related]
         return {**schema, 'record_id': record.id, 'updated_at': record.updated_at,
                 'values': record.values, 'selections': selections}

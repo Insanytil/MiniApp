@@ -7,6 +7,7 @@ import {
   Pause,
   Play,
   Plus,
+  Pencil,
 } from 'lucide-react'
 import { useAuth } from '@/features/auth'
 import type { UserOrganization } from '@/features/auth'
@@ -38,6 +39,7 @@ import {
   useOrganizationUserAccess,
 } from '../mutations'
 import { OrganizationUserCreateSheet } from './user-create-sheet'
+import { OrganizationUserProfileSheet } from './user-profile-sheet'
 
 const emptyRows: OrganizationUser[] = []
 export function OrganizationUsersPage() {
@@ -54,6 +56,7 @@ function ScopedUsersPage({ organization }: { organization: UserOrganization }) {
     placeholderData: keepPreviousData,
   })
   const [creating, setCreating] = useState(false)
+  const [profileUser, setProfileUser] = useState<OrganizationUser | null>(null)
   const [target, setTarget] = useState<OrganizationUser | null>(null)
   const access = useOrganizationUserAccess(organization.id)
   const reset = useOrganizationPasswordReset(organization.id)
@@ -70,9 +73,14 @@ function ScopedUsersPage({ organization }: { organization: UserOrganization }) {
         cell: ({ row }) => (
           <div className="max-w-56 sm:max-w-sm">
             <p className="truncate font-medium" title={row.original.email}>
-              {row.original.email}
+              {row.original.display_name}
               {row.original.id === currentUser.id ? ' (vous)' : ''}
             </p>
+            {row.original.display_name !== row.original.email && (
+              <p className="truncate text-xs text-muted-foreground">
+                {row.original.email}
+              </p>
+            )}
             {!row.original.is_active && (
               <p className="mt-1 text-xs text-muted-foreground">
                 Compte suspendu par la plateforme
@@ -138,6 +146,10 @@ function ScopedUsersPage({ organization }: { organization: UserOrganization }) {
           )}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => setProfileUser(user)}>
+            <Pencil />
+            Modifier le profil
+          </DropdownMenuItem>
           <DropdownMenuItem
             disabled={!user.is_verified}
             title={
@@ -222,6 +234,14 @@ function ScopedUsersPage({ organization }: { organization: UserOrganization }) {
         loading={query.isPending}
         failed={query.isError}
       />
+      {profileUser && (
+        <OrganizationUserProfileSheet
+          user={profileUser}
+          organizationId={organization.id}
+          organizationName={organization.name}
+          onClose={() => setProfileUser(null)}
+        />
+      )}
       {creating && (
         <OrganizationUserCreateSheet
           organization={organization}

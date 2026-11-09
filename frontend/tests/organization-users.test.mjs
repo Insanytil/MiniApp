@@ -43,6 +43,8 @@ const {
   setOrganizationUserAccess,
   requestOrganizationPasswordReset,
   organizationUserSchema,
+  organizationUserProfileSchema,
+  updateOrganizationUserProfile,
   organizationUserError,
 } = await import(usersUrl)
 
@@ -152,4 +154,45 @@ test('authorization and cross-organization target errors propagate without retry
     organizationUserError(new ApiError(409, 'duplicate'), 'create'),
     /déjà/,
   )
+})
+
+test('organization profile names are normalized and remain optional', () => {
+  assert.deepEqual(
+    organizationUserProfileSchema.parse({
+      first_name: ' Alice ',
+      last_name: ' Dupont ',
+    }),
+    { first_name: 'Alice', last_name: 'Dupont' },
+  )
+  assert.deepEqual(
+    organizationUserProfileSchema.parse({ first_name: ' ', last_name: '' }),
+    { first_name: '', last_name: '' },
+  )
+  assert.equal(
+    organizationUserProfileSchema.safeParse({
+      first_name: 'x'.repeat(101),
+      last_name: '',
+    }).success,
+    false,
+  )
+})
+
+test('profile updates capture their organization and use CSRF without altering global identity', async (t) => {
+  const fetch = t.mock.method(globalThis, 'fetch', async () =>
+    Response.json({ display_name: 'Alice Dupont' }),
+  )
+  api.setOrganization('other')
+  await updateOrganizationUserProfile('authorized-org', 'user/id', {
+    first_name: ' Alice ',
+    last_name: 'Dupont',
+  })
+  const [url, request] = fetch.mock.calls[0].arguments
+  assert.equal(url, '/api/organization/users/user%2Fid/profile')
+  assert.equal(request.method, 'PUT')
+  assert.equal(request.headers.get('X-Organization-ID'), 'authorized-org')
+  assert.equal(request.headers.get('X-CSRF-Token'), 'csrf-test')
+  assert.deepEqual(JSON.parse(request.body), {
+    first_name: 'Alice',
+    last_name: 'Dupont',
+  })
 })

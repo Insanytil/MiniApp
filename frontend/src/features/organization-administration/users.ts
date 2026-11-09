@@ -12,6 +12,9 @@ import type {
 export interface OrganizationUser {
   id: string
   email: string
+  first_name: string
+  last_name: string
+  display_name: string
   is_active: boolean
   is_verified: boolean
   membership_is_active: boolean
@@ -98,4 +101,40 @@ export function organizationUserError(
       return 'Vous devez être administrateur de cette organisation pour effectuer cette action.'
   }
   return errorMessage(error)
+}
+
+const profileNameSchema = z
+  .string()
+  .trim()
+  .max(100, '100 caractères maximum.')
+  .refine(
+    (value) =>
+      [...value].every(
+        (character) =>
+          character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127,
+      ),
+    'Le nom ne peut pas contenir de caractères de contrôle.',
+  )
+export const organizationUserProfileSchema = z.object({
+  first_name: profileNameSchema,
+  last_name: profileNameSchema,
+})
+export type OrganizationUserProfileInput = z.infer<
+  typeof organizationUserProfileSchema
+>
+
+export function updateOrganizationUserProfile(
+  organizationId: string,
+  userId: string,
+  values: OrganizationUserProfileInput,
+) {
+  return api.request<OrganizationUser>(
+    `/organization/users/${encodeURIComponent(userId)}/profile`,
+    {
+      method: 'PUT',
+      organizationScoped: true,
+      organizationId,
+      body: organizationUserProfileSchema.parse(values),
+    },
+  )
 }

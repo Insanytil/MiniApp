@@ -24,6 +24,7 @@ class EditingTests(unittest.IsolatedAsyncioTestCase):
         self.repo.get_record = AsyncMock(return_value=self.record)
         self.repo.record_edges = AsyncMock(return_value=[self.edge])
         self.repo.replace_record = AsyncMock()
+        self.repo.actor_labels = AsyncMock(return_value={str(self.actor): "actor@example.com"})
         self.repo.link_counts.return_value = {
             (self.relation_id, 'source', str(self.record_id)): 1,
             (self.relation_id, 'target', str(self.target.id)): 1,

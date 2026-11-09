@@ -60,7 +60,7 @@ class OrganizationUserTests(unittest.IsolatedAsyncioTestCase):
         self.user = SimpleNamespace(id=uuid.uuid4(), email='user@example.com', is_active=True,
                                     is_verified=True, created_at='date')
         self.member = SimpleNamespace(organization_id=self.org, user_id=self.user.id,
-                                      is_active=True, role=Roles.USER)
+                                      is_active=True, role=Roles.USER, first_name="", last_name="")
         self.other_member = SimpleNamespace(organization_id=uuid.uuid4(), is_active=True, role=Roles.ADMIN)
         self.user.organization_memberships = [self.member, self.other_member]
         self.repo = SimpleNamespace(get_member=AsyncMock(return_value=(self.user, self.member)),

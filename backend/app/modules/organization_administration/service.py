@@ -57,6 +57,18 @@ class OrganizationUserService:
         )
         return self.to_response(user, membership), queued
 
+    async def update_profile(self, *, organization_id, user_id, payload):
+        row = await self.repository.get_member(
+            organization_id=organization_id, user_id=user_id, for_update=True,
+        )
+        if row is None:
+            raise OrganizationMembershipNotFoundError()
+        user, membership = row
+        membership.first_name = payload.first_name
+        membership.last_name = payload.last_name
+        await self.db.commit()
+        return self.to_response(user, membership)
+
     async def set_access(
         self, *, organization_id: uuid.UUID, actor_id: uuid.UUID,
         user_id: uuid.UUID, is_active: bool,
@@ -96,6 +108,8 @@ class OrganizationUserService:
     def to_response(user: User, membership: OrganizationMembership) -> OrganizationUserResponse:
         return OrganizationUserResponse(
             id=user.id, email=user.email, is_active=user.is_active,
+            first_name=membership.first_name, last_name=membership.last_name,
+            display_name=" ".join(part for part in (membership.first_name, membership.last_name) if part) or user.email,
             is_verified=user.is_verified, created_at=user.created_at,
             membership_is_active=membership.is_active, role=membership.role,
         )

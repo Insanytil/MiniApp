@@ -9,7 +9,7 @@ from app.modules.organization_administration.dependencies import OrganizationUse
 from app.modules.organization_administration.schemas import (
     CreateOrganizationUserRequest, CreateOrganizationUserResponse,
     OrganizationUserListParams, OrganizationUserResponse,
-    UpdateOrganizationUserAccessRequest,
+    UpdateOrganizationUserAccessRequest, UpdateOrganizationUserProfileRequest,
 )
 from app.modules.organization_administration.service import SelfSuspensionError
 from app.modules.platform_administration.exceptions import (
@@ -82,3 +82,16 @@ async def send_password_reset(
     except UserNotVerifiedError:
         raise HTTPException(status_code=409, detail="User account must be activated first") from None
     return EmailDispatchResponse(queued=queued)
+
+
+@router.put("/{user_id}/profile", response_model=OrganizationUserResponse)
+async def update_profile(
+    user_id: uuid.UUID, payload: UpdateOrganizationUserProfileRequest,
+    scope: OrganizationAdminScope, service: OrganizationUserServiceDep,
+):
+    try:
+        return await service.update_profile(
+            organization_id=scope.organization.id, user_id=user_id, payload=payload,
+        )
+    except OrganizationMembershipNotFoundError:
+        raise HTTPException(status_code=404, detail="Organization membership not found") from None
