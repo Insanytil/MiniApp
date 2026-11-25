@@ -92,7 +92,7 @@ export function FileNameDialog({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-between gap-2">
             <Button
               type="button"
               variant="outline"
