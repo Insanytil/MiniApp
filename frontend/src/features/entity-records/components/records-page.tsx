@@ -23,10 +23,11 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { errorMessage } from '@/lib/api/client'
 import { deleteRecord, recordsQuery } from '../records'
-import { createRecordError, recordRootKey } from '../creation'
+import { createRecordError } from '../creation'
 import type { EntityRecordRow } from '../records'
 import { RecordCreateSheet } from './record-create-sheet'
 import { RecordCell } from './record-cell'
+import { invalidateRecordData } from '../invalidation'
 
 const emptyRows: EntityRecordRow[] = []
 export function EntityRecordsPage({ entityTypeId }: { entityTypeId: string }) {
@@ -64,9 +65,7 @@ function ScopedRecords({
     onSuccess: (_, id) => {
       setDeleting(null)
       setSelected((current) => (current === id ? null : current))
-      return queryClient.invalidateQueries({
-        queryKey: recordRootKey(organizationId),
-      })
+      return invalidateRecordData(queryClient, organizationId)
     },
   })
   useListPageBoundary(query, list)

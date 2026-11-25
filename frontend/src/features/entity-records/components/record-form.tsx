@@ -14,13 +14,13 @@ import {
   createRecord,
   createRecordError,
   initialDraft,
-  recordRootKey,
   relationKey,
   updateRecord,
 } from '../creation'
 import type { CreateRecordPayload, CreationSchema } from '../creation'
 import { RelationInput } from './relation-input'
 import { ScalarInput } from './scalar-input'
+import { invalidateRecordData } from '../invalidation'
 
 const versionConflictDetails = [
   'Record schema version conflict',
@@ -63,9 +63,7 @@ export function RecordForm({
         : createRecord(organizationId, typeId, payload),
     retry: false,
     onSuccess: async (result) => {
-      await client.invalidateQueries({
-        queryKey: recordRootKey(organizationId),
-      })
+      await invalidateRecordData(client, organizationId)
       toast.add({
         title: snapshot.record_id
           ? 'Enregistrement modifié'
@@ -77,9 +75,7 @@ export function RecordForm({
     },
     onError: (error) => {
       if (error instanceof ApiError && error.status === 409)
-        void client.invalidateQueries({
-          queryKey: recordRootKey(organizationId),
-        })
+        void invalidateRecordData(client, organizationId)
     },
   })
   const reload = async () => {

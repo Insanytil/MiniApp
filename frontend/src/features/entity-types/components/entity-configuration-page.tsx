@@ -11,7 +11,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from '@/components/ui/toast'
-import { recordRootKey } from '@/features/entity-records/creation'
 import {
   configurationCatalogQuery,
   configurationError,
@@ -41,6 +40,7 @@ import { FieldsTable } from './fields-table'
 import { RelationsTable } from './relations-table'
 import { UnsavedChangesBar } from './unsaved-changes-bar'
 import { ViewsTable } from './views-table'
+import { invalidateRecordData } from '@/features/entity-records/invalidation'
 
 const invalidateConfigurationConsumers = (
   client: QueryClient,
@@ -48,7 +48,7 @@ const invalidateConfigurationConsumers = (
 ) =>
   Promise.all([
     client.invalidateQueries({ queryKey: entityTypeKeys(organizationId) }),
-    client.invalidateQueries({ queryKey: recordRootKey(organizationId) }),
+    invalidateRecordData(client, organizationId),
   ])
 
 const labels = {
