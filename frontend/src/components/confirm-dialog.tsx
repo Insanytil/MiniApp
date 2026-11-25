@@ -77,7 +77,7 @@ export function ConfirmDialog({
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        <AlertDialogFooter className="sm:flex-wrap">
+        <AlertDialogFooter className="sm:flex-wrap sm:justify-between">
           <Button
             variant="outline"
             disabled={locked}
