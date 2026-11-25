@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ApiError, errorMessage } from '@/lib/api/client'
-import { validFilename } from './policy'
+import { validFilename } from '../policy'
 
 export function FileNameDialog({
   title,

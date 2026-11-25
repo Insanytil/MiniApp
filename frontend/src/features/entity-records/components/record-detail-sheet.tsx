@@ -10,7 +10,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { ChoiceBadges } from '@/features/entity-types/components/choice-badges'
-import { RecordImage } from '@/features/files/record-image'
+import { RecordImage } from '@/features/files/components/record-image'
 import { errorMessage } from '@/lib/api/client'
 import { recordDetailQuery, formatValue } from '../records'
 import type { RecordDetail } from '../records'

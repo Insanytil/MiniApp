@@ -1,4 +1,4 @@
-import { RecordImage } from '@/features/files/record-image'
+import { RecordImage } from '@/features/files/components/record-image'
 import { ChoiceBadges } from '@/features/entity-types/components/choice-badges'
 import { recordInitials } from '@/features/entity-types/presentation'
 import { formatValue } from '../records'

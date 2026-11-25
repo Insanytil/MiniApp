@@ -2,7 +2,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { ImageFieldInput } from '@/features/files/image-field-input'
+import { ImageFieldInput } from '@/features/files/components/image-field-input'
 import type { FieldDefinition } from '@/features/entity-types/configuration'
 
 export function ScalarInput({
