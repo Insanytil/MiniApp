@@ -222,22 +222,18 @@ function ScopedFileManager({ organizationId }: { organizationId: string }) {
           description={`Le fichier « ${deleting.filename} » sera supprimé définitivement du stockage. Cette action est possible uniquement s’il n’est plus lié à une fiche.`}
           confirmLabel="Supprimer"
           destructive
-          disabled={mutation.isPending}
+          pending={mutation.isPending}
+          error={
+            mutation.isError &&
+            fileError(
+              mutation.error,
+              'Ce fichier est maintenant lié à une fiche. Sa suppression est bloquée.',
+            )
+          }
           onConfirm={() =>
             mutation.mutate({ file: deleting, action: 'delete' })
           }
-        >
-          {mutation.isError && (
-            <Alert variant="destructive">
-              <AlertDescription>
-                {fileError(
-                  mutation.error,
-                  'Ce fichier est maintenant lié à une fiche. Sa suppression est bloquée.',
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-        </ConfirmDialog>
+        />
       )}
     </div>
   )
