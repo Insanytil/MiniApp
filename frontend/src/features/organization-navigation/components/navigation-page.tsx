@@ -1,28 +1,12 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowUp,
-  LoaderCircle,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Save,
-  Trash2,
-} from 'lucide-react'
+import { ArrowLeft, LoaderCircle, Plus, RefreshCw, Save } from 'lucide-react'
 import { useAuth } from '@/features/auth'
-import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { DraftProtection } from '@/components/draft-protection'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import {
   entries,
@@ -35,9 +19,8 @@ import {
   validateMenu,
 } from '../navigation'
 import type { MenuNode, MenuResponse } from '../navigation'
+import { MenuEditorTree } from './menu-editor-tree'
 import { MenuNodeSheet } from './menu-node-sheet'
-import { MenuIcon } from './menu-icon'
-import { DraftProtection } from '@/components/draft-protection'
 
 export function OrganizationNavigationPage() {
   const { organization } = useAuth()
@@ -111,6 +94,30 @@ function MenuEditor({
     setNodes(next)
     mutation.reset()
   }
+  const resetTo = (menu: MenuResponse) => {
+    setBase(menu)
+    change(structuredClone(menu.document.nodes))
+  }
+  const reload = async () => {
+    setReloadBusy(true)
+    try {
+      resetTo(
+        await client.fetchQuery({
+          ...navigationQuery(organizationId),
+          staleTime: 0,
+        }),
+      )
+      setReloading(false)
+    } catch (error) {
+      toast.add({
+        title: 'Rechargement impossible',
+        description: navigationError(error),
+        type: 'error',
+      })
+    } finally {
+      setReloadBusy(false)
+    }
+  }
   return (
     <div className="mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col gap-4">
       <div className="flex shrink-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -181,7 +188,7 @@ function MenuEditor({
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border bg-card p-3 sm:p-5">
-        <EditorTree
+        <MenuEditorTree
           nodes={nodes}
           types={saved.entity_types}
           disabled={mutation.isPending}
@@ -208,179 +215,36 @@ function MenuEditor({
           onClose={() => setEditing(null)}
         />
       )}
-      <AlertDialog
+      <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => {
           if (!open) setDeleting(null)
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Retirer cet élément du menu ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleting?.kind === 'category'
-                ? 'La catégorie et tous les éléments de menu qu’elle contient seront retirés.'
-                : 'Ce lien sera retiré du menu.'}{' '}
-              Les types d’entités et leurs données seront conservés.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <Button variant="outline" onClick={() => setDeleting(null)}>
-              Annuler
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (deleting) change(removeNode(nodes, deleting.id))
-                setDeleting(null)
-              }}
-            >
-              Retirer du brouillon
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog open={reloading} onOpenChange={setReloading}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Recharger le menu ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Le brouillon non enregistré sera abandonné.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <Button
-              variant="outline"
-              disabled={reloadBusy}
-              onClick={() => setReloading(false)}
-            >
-              Annuler
-            </Button>
-            <Button
-              disabled={reloadBusy}
-              onClick={async () => {
-                setReloadBusy(true)
-                try {
-                  const result = await client.fetchQuery({
-                    ...navigationQuery(organizationId),
-                    staleTime: 0,
-                  })
-                  setBase(result)
-                  setNodes(structuredClone(result.document.nodes))
-                  mutation.reset()
-                  setReloading(false)
-                } catch (error) {
-                  toast.add({
-                    title: 'Rechargement impossible',
-                    description: navigationError(error),
-                    type: 'error',
-                  })
-                } finally {
-                  setReloadBusy(false)
-                }
-              }}
-            >
-              Recharger
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title="Retirer cet élément du menu ?"
+        description={`${
+          deleting?.kind === 'category'
+            ? 'La catégorie et tous les éléments de menu qu’elle contient seront retirés.'
+            : 'Ce lien sera retiré du menu.'
+        } Les types d’entités et leurs données seront conservés.`}
+        confirmLabel="Retirer du brouillon"
+        destructive
+        onConfirm={() => {
+          if (deleting) change(removeNode(nodes, deleting.id))
+          setDeleting(null)
+        }}
+      />
+      <ConfirmDialog
+        open={reloading}
+        onOpenChange={(open) => {
+          if (!reloadBusy) setReloading(open)
+        }}
+        title="Recharger le menu ?"
+        description="Le brouillon non enregistré sera abandonné."
+        confirmLabel="Recharger"
+        disabled={reloadBusy}
+        onConfirm={reload}
+      />
       <DraftProtection dirty={dirty} busy={mutation.isPending} />
     </div>
-  )
-}
-function EditorTree({
-  nodes,
-  types,
-  disabled,
-  onEdit,
-  onDelete,
-  onMove,
-}: {
-  nodes: MenuNode[]
-  types: MenuResponse['entity_types']
-  disabled: boolean
-  onEdit: (node: MenuNode) => void
-  onDelete: (node: MenuNode) => void
-  onMove: (id: string, offset: number) => void
-}) {
-  return (
-    <ul className="space-y-2">
-      {nodes.map((node, index) => {
-        const label =
-          node.label ||
-          (node.kind === 'entity'
-            ? types.find((type) => type.id === node.entity_type_id)?.name
-            : '') ||
-          'Type indisponible'
-        return (
-          <li key={node.id}>
-            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 p-2">
-              <span className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">
-                <MenuIcon icon={node.icon} kind={node.kind} />
-                <span className="truncate" title={label}>
-                  {label}
-                </span>
-              </span>
-              <div className="flex shrink-0">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={disabled || index === 0}
-                  aria-label={`Monter ${label}`}
-                  onClick={() => onMove(node.id, -1)}
-                >
-                  <ArrowUp />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={disabled || index === nodes.length - 1}
-                  aria-label={`Descendre ${label}`}
-                  onClick={() => onMove(node.id, 1)}
-                >
-                  <ArrowDown />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={disabled}
-                  aria-label={`Modifier ${label}`}
-                  onClick={() => onEdit(node)}
-                >
-                  <Pencil />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={disabled}
-                  aria-label={`Retirer ${label}`}
-                  onClick={() => onDelete(node)}
-                >
-                  <Trash2 />
-                </Button>
-              </div>
-            </div>
-            {node.kind === 'category' && (
-              <div className="mt-2 ml-2 border-l pl-2 sm:ml-4 sm:pl-3">
-                <EditorTree
-                  nodes={node.children}
-                  types={types}
-                  disabled={disabled}
-                  onEdit={onEdit}
-                  onDelete={onDelete}
-                  onMove={onMove}
-                />
-                {!node.children.length && (
-                  <p className="py-2 text-xs text-muted-foreground">
-                    Catégorie vide
-                  </p>
-                )}
-              </div>
-            )}
-          </li>
-        )
-      })}
-    </ul>
   )
 }
