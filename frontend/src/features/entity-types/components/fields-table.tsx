@@ -1,20 +1,7 @@
-import { useId, useState } from 'react'
-import {
-  ArrowDown,
-  ArrowUp,
-  GripVertical,
-  LockKeyhole,
-  Pencil,
-  Plus,
-  Search,
-  Trash2,
-  X,
-} from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { useState } from 'react'
+import { LockKeyhole, Pencil, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { Button } from '@/components/ui/button'
 import {
   Popover,
   PopoverContent,
@@ -35,6 +22,16 @@ import type {
   FieldDefinition,
   FieldKind,
 } from '../configuration'
+import {
+  emptyFieldFilters,
+  filterFields,
+  hasFieldFilters,
+  listedFields,
+  moveField,
+} from '../fields-order'
+import { DependenciesPopover } from './dependencies-popover'
+import { FieldOrderHandle } from './field-order-handle'
+import { FieldsToolbar } from './fields-toolbar'
 
 const symbols: Record<FieldKind, string> = {
   text: 'Aa',
@@ -49,11 +46,6 @@ const symbols: Record<FieldKind, string> = {
   phone: 'Tél.',
   address: 'Adr.',
 }
-const searchable = (value: string) =>
-  value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase()
 
 export function FieldsTable({
   type,
@@ -72,138 +64,41 @@ export function FieldsTable({
   onRemove: (field: FieldDefinition) => void
   onReorder: (fields: FieldDefinition[]) => void
 }) {
-  const id = useId()
-  const [search, setSearch] = useState('')
-  const [kind, setKind] = useState('')
-  const [required, setRequired] = useState('')
+  const [filters, setFilters] = useState(emptyFieldFilters)
   const [dragged, setDragged] = useState<string | null>(null)
   const [over, setOver] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState('')
   const fields = type.configuration.fields
-  const allFields = [
-    ...fields.map((field) => ({ ...field, system: false })),
-    ...type.available_system_fields.map((field) => ({
-      ...field,
-      system: true,
-    })),
-  ]
-  const filtered = !!search.trim() || !!kind || !!required
-  const visible = allFields.filter(
-    (field) =>
-      searchable(`${field.name} ${field.technical_name}`).includes(
-        searchable(search.trim()),
-      ) &&
-      (!kind || field.kind === kind) &&
-      (!required || field.required === (required === 'required')),
-  )
+  const allFields = listedFields(type)
+  const filtered = hasFieldFilters(filters)
+  const visible = filterFields(allFields, filters)
   const reorder = (sourceId: string, targetIndex: number) => {
     if (busy || filtered) return
-    const index = fields.findIndex((field) => field.id === sourceId)
-    if (
-      index < 0 ||
-      index === targetIndex ||
-      targetIndex < 0 ||
-      targetIndex >= fields.length
-    )
-      return
-    const next = [...fields]
-    const [field] = next.splice(index, 1)
-    next.splice(targetIndex, 0, field)
+    const next = moveField(fields, sourceId, targetIndex)
+    if (!next) return
     onReorder(next)
     setAnnouncement(
-      `${field.name} déplacé en position ${targetIndex + 1} sur ${fields.length}.`,
+      `${next[targetIndex].name} déplacé en position ${targetIndex + 1} sur ${fields.length}.`,
     )
-  }
-  const reset = () => {
-    setSearch('')
-    setKind('')
-    setRequired('')
   }
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <div className="relative min-w-44 flex-1 sm:max-w-sm">
-          <Label htmlFor={`${id}-search`} className="sr-only">
-            Rechercher un champ
-          </Label>
-          <Search
-            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Input
-            id={`${id}-search`}
-            value={search}
-            disabled={busy}
-            maxLength={255}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher un champ…"
-            className="h-9 bg-background pr-9 pl-9"
-          />
-          {search && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="absolute top-1 right-1"
-              aria-label="Effacer la recherche de champs"
-              onClick={() => setSearch('')}
-            >
-              <X />
-            </Button>
-          )}
-        </div>
-        <Label htmlFor={`${id}-kind`} className="sr-only">
-          Filtrer les champs par type
-        </Label>
-        <NativeSelect
-          id={`${id}-kind`}
-          value={kind}
-          disabled={busy}
-          onChange={(e) => setKind(e.target.value)}
-        >
-          <NativeSelectOption value="">Type · Tous</NativeSelectOption>
-          {Object.entries(fieldKinds).map(([value, label]) => (
-            <NativeSelectOption key={value} value={value}>
-              {label}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-        <Label htmlFor={`${id}-required`} className="sr-only">
-          Filtrer les champs par obligation
-        </Label>
-        <NativeSelect
-          id={`${id}-required`}
-          value={required}
-          disabled={busy}
-          onChange={(e) => setRequired(e.target.value)}
-        >
-          <NativeSelectOption value="">Requis · Tous</NativeSelectOption>
-          <NativeSelectOption value="required">Requis</NativeSelectOption>
-          <NativeSelectOption value="optional">Optionnels</NativeSelectOption>
-        </NativeSelect>
-        <p role="status" className="px-1 text-xs text-muted-foreground">
-          {filtered
-            ? `${visible.length} sur ${allFields.length}`
-            : allFields.length}{' '}
-          champ{allFields.length > 1 ? 's' : ''}
-        </p>
-        <Button
-          type="button"
-          size="sm"
-          className="ml-auto"
-          disabled={busy}
-          onClick={onAdd}
-        >
-          <Plus /> Ajouter un champ
-        </Button>
-      </div>
+      <FieldsToolbar
+        filters={filters}
+        onFiltersChange={setFilters}
+        filtered={filtered}
+        visibleCount={visible.length}
+        totalCount={allFields.length}
+        busy={busy}
+        onAdd={onAdd}
+      />
       {filtered && (
         <p className="shrink-0 text-xs text-muted-foreground">
           Réinitialisez les filtres pour réordonner les champs.{' '}
           <button
             type="button"
             className="underline underline-offset-2"
-            onClick={reset}
+            onClick={() => setFilters(emptyFieldFilters)}
           >
             Réinitialiser
           </button>
@@ -276,66 +171,23 @@ export function FieldsTable({
                         aria-hidden="true"
                       />
                     ) : (
-                      <Popover>
-                        <PopoverTrigger
-                          render={
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              disabled={busy || filtered}
-                              draggable={!busy && !filtered}
-                              aria-label={`Déplacer ${field.name}`}
-                              title="Glisser pour déplacer, ou Alt + flèche haut/bas"
-                              onKeyDown={(e) => {
-                                if (
-                                  e.altKey &&
-                                  (e.key === 'ArrowUp' || e.key === 'ArrowDown')
-                                ) {
-                                  e.preventDefault()
-                                  reorder(
-                                    field.id,
-                                    index + (e.key === 'ArrowUp' ? -1 : 1),
-                                  )
-                                }
-                              }}
-                              onDragStart={(e) => {
-                                e.dataTransfer.setData('text/plain', field.id)
-                                e.dataTransfer.effectAllowed = 'move'
-                                setDragged(field.id)
-                              }}
-                              onDragEnd={() => {
-                                setDragged(null)
-                                setOver(null)
-                              }}
-                              className="cursor-grab text-muted-foreground active:cursor-grabbing"
-                            />
-                          }
-                        >
-                          <GripVertical className="size-3.5" />
-                        </PopoverTrigger>
-                        <PopoverContent className="w-48" align="start">
-                          <PopoverTitle>Déplacer le champ</PopoverTitle>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={index === 0 || busy}
-                            onClick={() => reorder(field.id, index - 1)}
-                          >
-                            <ArrowUp /> Monter
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={index === fields.length - 1 || busy}
-                            onClick={() => reorder(field.id, index + 1)}
-                          >
-                            <ArrowDown /> Descendre
-                          </Button>
-                        </PopoverContent>
-                      </Popover>
+                      <FieldOrderHandle
+                        name={field.name}
+                        index={index}
+                        count={fields.length}
+                        disabled={busy || filtered}
+                        busy={busy}
+                        onMove={(target) => reorder(field.id, target)}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', field.id)
+                          e.dataTransfer.effectAllowed = 'move'
+                          setDragged(field.id)
+                        }}
+                        onDragEnd={() => {
+                          setDragged(null)
+                          setOver(null)
+                        }}
+                      />
                     )}
                   </TableCell>
                   <TableCell className="py-3">
@@ -402,38 +254,12 @@ export function FieldsTable({
                     )}
                   </TableCell>
                   <TableCell>
-                    {dependencies.length ? (
-                      <Popover>
-                        <PopoverTrigger
-                          render={
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="xs"
-                              aria-label={`Voir les utilisations de ${field.name}`}
-                              className="rounded-full font-normal"
-                            />
-                          }
-                        >
-                          {dependencies.length} utilisation
-                          {dependencies.length > 1 ? 's' : ''}
-                        </PopoverTrigger>
-                        <PopoverContent align="start">
-                          <PopoverTitle>
-                            Utilisation de {field.name}
-                          </PopoverTitle>
-                          <ul className="space-y-1 text-xs text-muted-foreground">
-                            {dependencies.map((name, i) => (
-                              <li key={`${name}-${i}`}>{name}</li>
-                            ))}
-                          </ul>
-                        </PopoverContent>
-                      </Popover>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">
-                        Non utilisé
-                      </span>
-                    )}
+                    <DependenciesPopover
+                      dependencies={dependencies}
+                      name={field.name}
+                      title={`Utilisation de ${field.name}`}
+                      emptyLabel="Non utilisé"
+                    />
                   </TableCell>
                   <TableCell className="sticky right-0 bg-card text-right">
                     {field.system ? (

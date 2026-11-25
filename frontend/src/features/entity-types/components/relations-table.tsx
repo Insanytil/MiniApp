@@ -29,15 +29,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { matchesSearch } from '@/lib/search'
 import { dependentDefinitions } from '../configuration'
 import type { ConfiguredEntityType, RelationDefinition } from '../configuration'
 import { relationRows } from '../relations'
-
-const normalize = (value: string) =>
-  value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase()
+import { DependenciesPopover } from './dependencies-popover'
 
 export function RelationsTable({
   type,
@@ -62,7 +58,7 @@ export function RelationsTable({
   const visible = rows.filter(
     (row) =>
       (!direction || row.direction === direction) &&
-      normalize(
+      matchesSearch(
         [
           row.name,
           row.definition.name,
@@ -70,7 +66,8 @@ export function RelationsTable({
           row.definition.technical_name,
           ...row.linkedTypes,
         ].join(' '),
-      ).includes(normalize(search.trim())),
+        search,
+      ),
   )
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
@@ -253,41 +250,13 @@ export function RelationsTable({
                     )}
                   </TableCell>
                   <TableCell>
-                    {dependencies.length ? (
-                      <Popover>
-                        <PopoverTrigger
-                          render={
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="xs"
-                              className="rounded-full font-normal"
-                              aria-label={`Voir les utilisations de ${row.name}`}
-                            />
-                          }
-                        >
-                          {dependencies.length} utilisation
-                          {dependencies.length > 1 ? 's' : ''}
-                        </PopoverTrigger>
-                        <PopoverContent align="start">
-                          <PopoverTitle>
-                            Utilisation de la relation
-                          </PopoverTitle>
-                          <p className="text-xs text-muted-foreground">
-                            Références à cette relation, dans les deux sens.
-                          </p>
-                          <ul className="space-y-1 text-xs">
-                            {dependencies.map((name, i) => (
-                              <li key={`${name}-${i}`}>{name}</li>
-                            ))}
-                          </ul>
-                        </PopoverContent>
-                      </Popover>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">
-                        Non utilisée
-                      </span>
-                    )}
+                    <DependenciesPopover
+                      dependencies={dependencies}
+                      name={row.name}
+                      title="Utilisation de la relation"
+                      description="Références à cette relation, dans les deux sens."
+                      emptyLabel="Non utilisée"
+                    />
                   </TableCell>
                   <TableCell className="sticky right-0 bg-card text-right">
                     <div className="flex justify-end gap-1">

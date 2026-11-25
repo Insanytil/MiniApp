@@ -1,3 +1,4 @@
+import { matchesSearch } from '@/lib/search'
 import { fieldKinds, navigations } from './configuration'
 import type {
   ConfiguredEntityType,
@@ -34,9 +35,6 @@ export interface ColumnContext {
   paths: Navigation[]
   choices: ColumnChoice[]
 }
-
-const normalize = (value: string) =>
-  value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase()
 
 export function columnContext(
   type: ConfiguredEntityType,
@@ -75,11 +73,8 @@ export function columnContext(
 }
 
 export function searchChoices(choices: ColumnChoice[], search: string) {
-  const needle = normalize(search.trim())
   return choices.filter((choice) =>
-    normalize(`${choice.label} ${choice.group} ${choice.detail}`).includes(
-      needle,
-    ),
+    matchesSearch(`${choice.label} ${choice.group} ${choice.detail}`, search),
   )
 }
 
