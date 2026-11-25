@@ -26,14 +26,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { matchesSearch } from '@/lib/search'
 import type { ConfiguredEntityType, ViewDefinition } from '../configuration'
 import { ConfigurationPreview } from './configuration-preview'
-
-const normalize = (value: string) =>
-  value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase()
 
 export function ViewsTable({
   type,
@@ -60,9 +55,10 @@ export function ViewsTable({
   const visible = views.filter(
     (view) =>
       (!status || view.is_default === (status === 'default')) &&
-      normalize(
+      matchesSearch(
         [view.name, ...view.columns.map((column) => column.label)].join(' '),
-      ).includes(normalize(search.trim())),
+        search,
+      ),
   )
   const preview = views.find((view) => view.id === previewId)
   return (

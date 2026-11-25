@@ -13,10 +13,10 @@ import {
 } from '@/components/ui/dialog'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { errorMessage } from '@/lib/api/client'
-import { filesKey, listFiles } from './api'
-import type { StoredFile } from './api'
+import { filesKey, listFiles } from '../api'
+import type { StoredFile } from '../api'
 import { RecordImage } from './record-image'
-import { imageContentTypes } from './policy'
+import { imageContentTypes } from '../policy'
 
 const pageSize = 18
 

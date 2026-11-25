@@ -34,12 +34,14 @@ const usersUrl = await moduleUrl(
     '@/components/data-table/server-pagination': paginationUrl,
   },
 )
+const searchUrl = await moduleUrl('../src/lib/search.ts')
 const organizationsUrl = await moduleUrl(
   '../src/features/platform-administration/organizations.ts',
   {
     '@tanstack/react-query': import.meta.resolve('@tanstack/react-query'),
     zod: import.meta.resolve('zod'),
     '@/lib/api': apiUrl,
+    '@/lib/search': searchUrl,
     '@/lib/api/client': clientUrl,
     '@/features/auth/session': sessionStub,
     './users': usersUrl,

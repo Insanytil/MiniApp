@@ -25,12 +25,14 @@ const apiSource = `import { createApiClient } from ${JSON.stringify(clientUrl)};
 const apiUrl = `data:text/javascript;base64,${Buffer.from(apiSource).toString('base64')}`
 const { api } = await import(apiUrl)
 const { ApiError } = await import(clientUrl)
+const searchUrl = await moduleUrl('../src/lib/search.ts')
 const definitionsUrl = await moduleUrl(
   '../src/features/entity-types/entity-types.ts',
   {
     '@tanstack/react-query': import.meta.resolve('@tanstack/react-query'),
     zod: import.meta.resolve('zod'),
     '@/lib/api': apiUrl,
+    '@/lib/search': searchUrl,
     '@/lib/api/client': clientUrl,
     '@/features/organizations/selection': selectionUrl,
     '@/components/data-table/server-pagination': paginationUrl,
@@ -259,14 +261,48 @@ test('stale or unchanged column drag targets do not alter the draft', () => {
 
 test('a view allows each field, relation navigation and representation only once', async () => {
   const { definitionError } = await import(configUrl)
-  const field = {id:'one',label:'Prénom',kind:'field',field_id:'first',relation_id:null,profile_id:null,direction:'outgoing',collection_display:'list'}
-  const duplicate = {...field,id:'two',label:'Autre libellé'}
-  assert.match(definitionError('views',{id:'view',name:'Vue',is_default:true,columns:[field,duplicate]}),/une seule fois/)
-  const relation={...field,kind:'relation',field_id:null,relation_id:'r',direction:'incoming'}
-  const counter={...relation,id:'counter',kind:'count'}
-  assert.equal(viewColumnKey(relation),viewColumnKey(counter))
-  assert.notEqual(viewColumnKey(relation),viewColumnKey({...relation,direction:'outgoing'}))
-  assert.match(definitionError('views',{id:'view',name:'Vue',is_default:true,columns:[relation,counter]}),/une seule fois/)
+  const field = {
+    id: 'one',
+    label: 'Prénom',
+    kind: 'field',
+    field_id: 'first',
+    relation_id: null,
+    profile_id: null,
+    direction: 'outgoing',
+    collection_display: 'list',
+  }
+  const duplicate = { ...field, id: 'two', label: 'Autre libellé' }
+  assert.match(
+    definitionError('views', {
+      id: 'view',
+      name: 'Vue',
+      is_default: true,
+      columns: [field, duplicate],
+    }),
+    /une seule fois/,
+  )
+  const relation = {
+    ...field,
+    kind: 'relation',
+    field_id: null,
+    relation_id: 'r',
+    direction: 'incoming',
+  }
+  const counter = { ...relation, id: 'counter', kind: 'count' }
+  assert.equal(viewColumnKey(relation), viewColumnKey(counter))
+  assert.notEqual(
+    viewColumnKey(relation),
+    viewColumnKey({ ...relation, direction: 'outgoing' }),
+  )
+  assert.match(
+    definitionError('views', {
+      id: 'view',
+      name: 'Vue',
+      is_default: true,
+      columns: [relation, counter],
+    }),
+    /une seule fois/,
+  )
 })
 const emptyConfig = () => ({
   schema_version: 1,

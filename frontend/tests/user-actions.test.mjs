@@ -31,7 +31,9 @@ const { userEmailActionFor, sendUserEmail, userEmailError } = await import(
 )
 const { ApiError } = await import(clientUrl)
 const { membershipAccessState, filterUserMemberships } = await import(
-  await moduleUrl('../src/features/platform-administration/user-access.ts')
+  await moduleUrl('../src/features/platform-administration/user-access.ts', {
+    '@/lib/search': await moduleUrl('../src/lib/search.ts'),
+  })
 )
 
 const activeUser = { is_active: true, is_verified: true }

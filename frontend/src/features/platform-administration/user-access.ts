@@ -1,3 +1,4 @@
+import { matchesSearch } from '@/lib/search'
 import type { PlatformUser } from './users'
 
 export function membershipAccessState(
@@ -42,17 +43,13 @@ export function filterUserMemberships(
   memberships: PlatformUser['memberships'],
   search: string,
 ) {
-  const normalize = (value: string) =>
-    value
-      .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-  const term = normalize(search.trim())
+  const term = search.trim()
   return term
     ? memberships.filter((membership) =>
-        normalize(
+        matchesSearch(
           `${membership.organization_name} ${membership.organization_slug}`,
-        ).includes(term),
+          term,
+        ),
       )
     : memberships
 }

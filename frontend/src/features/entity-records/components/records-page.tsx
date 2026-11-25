@@ -19,21 +19,15 @@ import type { ServerColumn } from '@/components/data-table/server-table'
 import { useListPageBoundary } from '@/components/data-table/use-list-page-boundary'
 import { useServerList } from '@/components/data-table/use-server-list'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { errorMessage } from '@/lib/api/client'
 import { deleteRecord, recordsQuery } from '../records'
-import { createRecordError, recordRootKey } from '../creation'
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { createRecordError } from '../creation'
 import type { EntityRecordRow } from '../records'
 import { RecordCreateSheet } from './record-create-sheet'
 import { RecordCell } from './record-cell'
+import { invalidateRecordData } from '../invalidation'
 
 const emptyRows: EntityRecordRow[] = []
 export function EntityRecordsPage({ entityTypeId }: { entityTypeId: string }) {
@@ -71,9 +65,7 @@ function ScopedRecords({
     onSuccess: (_, id) => {
       setDeleting(null)
       setSelected((current) => (current === id ? null : current))
-      return queryClient.invalidateQueries({
-        queryKey: recordRootKey(organizationId),
-      })
+      return invalidateRecordData(queryClient, organizationId)
     },
   })
   useListPageBoundary(query, list)
@@ -220,53 +212,26 @@ function ScopedRecords({
           onClose={() => setSelected(null)}
         />
       )}
-      <AlertDialog
+      <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => {
-          if (!open && !removal.isPending) {
+          if (!open) {
             setDeleting(null)
             removal.reset()
           }
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer cette fiche ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Cette suppression est définitive. Les relations configurées pour
-              bloquer la suppression seront vérifiées.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {removal.isError && (
-            <Alert variant="destructive">
-              <AlertDescription>
-                {createRecordError(removal.error)}
-              </AlertDescription>
-            </Alert>
-          )}
-          <AlertDialogFooter>
-            <Button
-              variant="outline"
-              disabled={removal.isPending}
-              onClick={() => {
-                setDeleting(null)
-                removal.reset()
-              }}
-            >
-              Annuler
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={removal.isPending || !deleting}
-              onClick={() => {
-                if (deleting) removal.mutate(deleting)
-              }}
-            >
-              {removal.isPending ? 'Suppression…' : 'Supprimer'}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title="Supprimer cette fiche ?"
+        description="Cette suppression est définitive. Les relations configurées pour bloquer la suppression seront vérifiées."
+        error={removal.isError && createRecordError(removal.error)}
+        confirmLabel="Supprimer"
+        pendingLabel="Suppression…"
+        destructive
+        pending={removal.isPending}
+        disabled={!deleting}
+        onConfirm={() => {
+          if (deleting) removal.mutate(deleting)
+        }}
+      />
     </div>
   )
 }

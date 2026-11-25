@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { FileNameDialog } from './file-name-dialog'
-import { filesKey, uploadFile } from './api'
-import type { StoredFile } from './api'
+import { filesKey, uploadFile } from '../api'
+import type { StoredFile } from '../api'
 
 export function FileUploadDialog({
   file,

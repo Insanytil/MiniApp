@@ -1,14 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import {
-  LoaderCircle,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  Trash2,
-  Settings2,
-} from 'lucide-react'
+import { MoreHorizontal, Pencil, Plus, Trash2, Settings2 } from 'lucide-react'
 import { useAuth } from '@/features/auth'
 import type { UserOrganization } from '@/features/auth'
 import { ServerTable } from '@/components/data-table/server-table'
@@ -16,6 +9,7 @@ import type { ServerColumn } from '@/components/data-table/server-table'
 import { useListPageBoundary } from '@/components/data-table/use-list-page-boundary'
 import { useServerList } from '@/components/data-table/use-server-list'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   DropdownMenu,
@@ -24,14 +18,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { toast } from '@/components/ui/toast'
 import { entityTypeError, entityTypesQuery } from '../entity-types'
 import type { EntityType } from '../entity-types'
@@ -219,60 +205,32 @@ function ScopedEntityTypesPage({
         />
       )}
       {deleting && (
-        <AlertDialog
+        <ConfirmDialog
           open
           onOpenChange={(open) => {
-            if (!open && !remove.isPending) setDeleting(null)
+            if (!open) setDeleting(null)
           }}
-        >
-          <AlertDialogContent className="max-h-[calc(100svh-2rem)] max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-md">
-            <AlertDialogHeader>
-              <AlertDialogTitle>Supprimer le type d’entité ?</AlertDialogTitle>
-              <AlertDialogDescription>
-                La définition « {deleting.name} » ({deleting.technical_name})
-                sera supprimée. Cette action est définitive.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            {remove.isError && (
-              <Alert variant="destructive">
-                <AlertDescription>
-                  {entityTypeError(remove.error)}
-                </AlertDescription>
-              </Alert>
-            )}
-            <AlertDialogFooter>
-              <Button
-                variant="outline"
-                disabled={remove.isPending}
-                onClick={() => setDeleting(null)}
-              >
-                Annuler
-              </Button>
-              <Button
-                variant="destructive"
-                disabled={remove.isPending}
-                onClick={async () => {
-                  try {
-                    await remove.mutateAsync(deleting.id)
-                    toast.add({
-                      title: 'Type d’entité supprimé',
-                      description: deleting.name,
-                      type: 'success',
-                    })
-                    setDeleting(null)
-                  } catch {
-                    /* Keep the confirmation open. */
-                  }
-                }}
-              >
-                {remove.isPending && (
-                  <LoaderCircle className="size-4 animate-spin" />
-                )}
-                {remove.isPending ? 'Suppression…' : 'Supprimer'}
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          title="Supprimer le type d’entité ?"
+          description={`La définition « ${deleting.name} » (${deleting.technical_name}) sera supprimée. Cette action est définitive.`}
+          error={remove.isError && entityTypeError(remove.error)}
+          confirmLabel="Supprimer"
+          pendingLabel="Suppression…"
+          destructive
+          pending={remove.isPending}
+          onConfirm={async () => {
+            try {
+              await remove.mutateAsync(deleting.id)
+              toast.add({
+                title: 'Type d’entité supprimé',
+                description: deleting.name,
+                type: 'success',
+              })
+              setDeleting(null)
+            } catch {
+              /* Keep the confirmation open. */
+            }
+          }}
+        />
       )}
     </div>
   )

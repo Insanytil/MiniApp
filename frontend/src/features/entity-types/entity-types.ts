@@ -1,3 +1,4 @@
+import { withoutAccents } from '@/lib/search'
 import { queryOptions } from '@tanstack/react-query'
 import { z } from 'zod'
 import { api } from '@/lib/api'
@@ -38,9 +39,7 @@ export const entityTypeSchema = z.object({
 })
 export type EntityTypeInput = z.infer<typeof entityTypeSchema>
 export function toTechnicalName(name: string) {
-  let result = name
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
+  let result = withoutAccents(name)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')

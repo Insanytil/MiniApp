@@ -2,12 +2,12 @@ import { useRef, useState } from 'react'
 import { Upload, X, Images } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { RecordImage } from '@/features/files/record-image'
+import { RecordImage } from './record-image'
 import { imageFileId } from '@/features/entity-types/presentation'
 import { FilePicker } from './file-picker'
 import { FileUploadDialog } from './file-upload-dialog'
 
-import { imageContentTypes } from './policy'
+import { imageContentTypes } from '../policy'
 
 export function ImageFieldInput({
   id,

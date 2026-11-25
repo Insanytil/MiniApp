@@ -1,5 +1,5 @@
 import { formatValue } from '@/features/entity-records/records'
-import { RecordImage } from '@/features/files/record-image'
+import { RecordImage } from '@/features/files/components/record-image'
 import { useId, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'

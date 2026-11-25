@@ -1,3 +1,4 @@
+import { withoutAccents } from '@/lib/search'
 import {
   queryOptions,
   useMutation,
@@ -55,9 +56,7 @@ export const organizationsQuery = (params: ListParams) =>
   })
 
 export function toSlug(name: string) {
-  return name
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
+  return withoutAccents(name)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')

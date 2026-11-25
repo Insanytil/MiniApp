@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/features/auth'
-import { getFileDownload } from './api'
+import { getFileDownload } from '../api'
 import { imageFileId, safeImageUrl } from '@/features/entity-types/presentation'
 import {
   Dialog,

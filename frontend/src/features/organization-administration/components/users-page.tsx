@@ -17,6 +17,7 @@ import { useListPageBoundary } from '@/components/data-table/use-list-page-bound
 import { useServerList } from '@/components/data-table/use-server-list'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Badge } from '@/components/ui/badge'
 import {
   DropdownMenu,
@@ -24,14 +25,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { organizationUserError, organizationUsersQuery } from '../users'
 import type { OrganizationUser } from '../users'
 import {
@@ -245,69 +238,45 @@ function ScopedUsersPage({ organization }: { organization: UserOrganization }) {
         />
       )}
       {target && (
-        <AlertDialog
+        <ConfirmDialog
           open
           onOpenChange={(open) => {
-            if (!open && !access.isPending) setTarget(null)
+            if (!open) setTarget(null)
           }}
-        >
-          <AlertDialogContent className="max-h-[calc(100svh-2rem)] max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-md">
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                {target.membership_is_active ? 'Suspendre' : 'Réactiver'}{' '}
-                l’accès ?
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                <span className="font-medium break-all text-foreground">
-                  {target.email}
-                </span>
-                <br />
-                {target.membership_is_active
-                  ? `L’accès à ${organization.name} sera suspendu. Ses accès aux autres organisations seront conservés.`
-                  : `L’accès à ${organization.name} sera réactivé. Le compte doit également être actif et validé pour se connecter.`}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            {access.isError && (
-              <Alert variant="destructive">
-                <AlertDescription>
-                  {organizationUserError(access.error, 'access')}
-                </AlertDescription>
-              </Alert>
-            )}
-            <AlertDialogFooter>
-              <Button
-                variant="outline"
-                disabled={access.isPending}
-                onClick={() => setTarget(null)}
-              >
-                Annuler
-              </Button>
-              <Button
-                disabled={access.isPending}
-                onClick={async () => {
-                  try {
-                    await access.mutateAsync({
-                      user: target,
-                      isActive: !target.membership_is_active,
-                    })
-                    setTarget(null)
-                  } catch {
-                    /* Keep the confirmation and display the error. */
-                  }
-                }}
-              >
-                {access.isPending && (
-                  <LoaderCircle className="size-4 animate-spin" />
-                )}
-                {access.isPending
-                  ? 'Traitement…'
-                  : target.membership_is_active
-                    ? 'Suspendre l’accès'
-                    : 'Réactiver l’accès'}
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          title={`${target.membership_is_active ? 'Suspendre' : 'Réactiver'} l’accès ?`}
+          description={
+            <>
+              <span className="font-medium break-all text-foreground">
+                {target.email}
+              </span>
+              <br />
+              {target.membership_is_active
+                ? `L’accès à ${organization.name} sera suspendu. Ses accès aux autres organisations seront conservés.`
+                : `L’accès à ${organization.name} sera réactivé. Le compte doit également être actif et validé pour se connecter.`}
+            </>
+          }
+          error={
+            access.isError && organizationUserError(access.error, 'access')
+          }
+          confirmLabel={
+            target.membership_is_active
+              ? 'Suspendre l’accès'
+              : 'Réactiver l’accès'
+          }
+          pendingLabel="Traitement…"
+          pending={access.isPending}
+          onConfirm={async () => {
+            try {
+              await access.mutateAsync({
+                user: target,
+                isActive: !target.membership_is_active,
+              })
+              setTarget(null)
+            } catch {
+              /* Keep the confirmation and display the error. */
+            }
+          }}
+        />
       )}
     </div>
   )

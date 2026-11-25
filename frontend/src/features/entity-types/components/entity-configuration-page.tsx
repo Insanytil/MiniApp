@@ -1,28 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useBlocker } from '@tanstack/react-router'
+import { useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  ArrowLeft,
-  LoaderCircle,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Save,
-  Trash2,
-} from 'lucide-react'
+import { ArrowLeft, LoaderCircle, RefreshCw, Save } from 'lucide-react'
+import type { QueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/features/auth'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { DraftProtection } from '@/components/draft-protection'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { toast } from '@/components/ui/toast'
 import {
   configurationCatalogQuery,
@@ -38,22 +25,32 @@ import type {
   DefinitionKind,
   DisplayProfile,
   EntityConfiguration,
-  ViewDefinition,
 } from '../configuration'
-import { recordRootKey } from '@/features/entity-records/creation'
+import {
+  countDraftChanges,
+  definitionKinds,
+  putDefinition,
+  removeDefinition,
+} from '../configuration-draft'
 import { entityTypeKeys } from '../entity-types'
-import { DefinitionSheet } from './definition-sheet'
 import { ConfigurationPreview } from './configuration-preview'
+import { DefinitionSheet } from './definition-sheet'
+import { DisplayProfilesList } from './display-profiles-list'
 import { FieldsTable } from './fields-table'
 import { RelationsTable } from './relations-table'
+import { UnsavedChangesBar } from './unsaved-changes-bar'
 import { ViewsTable } from './views-table'
+import { invalidateRecordData } from '@/features/entity-records/invalidation'
 
-const kinds: DefinitionKind[] = [
-  'fields',
-  'relations',
-  'display_profiles',
-  'views',
-]
+const invalidateConfigurationConsumers = (
+  client: QueryClient,
+  organizationId: string,
+) =>
+  Promise.all([
+    client.invalidateQueries({ queryKey: entityTypeKeys(organizationId) }),
+    invalidateRecordData(client, organizationId),
+  ])
+
 const labels = {
   fields: 'Champs',
   relations: 'Relations',
@@ -140,12 +137,6 @@ function ConfigurationEditor({
   catalog: ConfiguredEntityType[]
 }) {
   const client = useQueryClient()
-  const { registerOrganizationChangeGuard, selectOrganization } = useAuth()
-  const [pendingOrganization, setPendingOrganization] = useState<string | null>(
-    null,
-  )
-  const allowOrganizationChange = useRef(false)
-  const saving = useRef(false)
   const [base, setBase] = useState(saved)
   const [draft, setDraft] = useState<EntityConfiguration>(() =>
     structuredClone(saved.configuration),
@@ -155,50 +146,14 @@ function ConfigurationEditor({
     item?: DefinitionItem
   } | null>(null)
   const [reloading, setReloading] = useState(false)
+  const [reloadBusy, setReloadBusy] = useState(false)
   const [discarding, setDiscarding] = useState(false)
   const [definitionDirty, setDefinitionDirty] = useState(false)
   const [relatedBusy, setRelatedBusy] = useState(false)
   const dirty =
     definitionDirty ||
     JSON.stringify(draft) !== JSON.stringify(base.configuration)
-  const changeCount = kinds.reduce((total, kind) => {
-    const before = new Map(
-      base.configuration[kind].map((item) => [item.id, JSON.stringify(item)]),
-    )
-    const after = new Map(
-      draft[kind].map((item) => [item.id, JSON.stringify(item)]),
-    )
-    const changed = [...new Set([...before.keys(), ...after.keys()])].filter(
-      (id) => before.get(id) !== after.get(id),
-    ).length
-    const reordered =
-      base.configuration[kind].map((item) => item.id).join(',') !==
-      draft[kind].map((item) => item.id).join(',')
-    return total + (changed || (reordered ? 1 : 0))
-  }, 0)
-  useEffect(
-    () =>
-      registerOrganizationChangeGuard((id) => {
-        if (saving.current) {
-          toast.add({
-            title: 'Enregistrement en cours',
-            description: 'Attendez sa fin avant de changer d’organisation.',
-            type: 'loading',
-          })
-          return false
-        }
-        if (!dirty || allowOrganizationChange.current) return true
-        setPendingOrganization(id)
-        return false
-      }),
-    [dirty, registerOrganizationChangeGuard],
-  )
-  const blocker = useBlocker({
-    shouldBlockFn: ({ next }) =>
-      (dirty || saving.current) && next.pathname !== '/login',
-    enableBeforeUnload: dirty,
-    withResolver: true,
-  })
+  const changeCount = countDraftChanges(base.configuration, draft)
   const type = { ...saved, configuration: draft }
   const catalog = savedCatalog.map((item) =>
     item.id === type.id ? type : item,
@@ -215,10 +170,7 @@ function ConfigurationEditor({
     onSuccess: async (result) => {
       setBase(result)
       setDraft(structuredClone(result.configuration))
-      await Promise.all([
-        client.invalidateQueries({ queryKey: entityTypeKeys(organizationId) }),
-        client.invalidateQueries({ queryKey: recordRootKey(organizationId) }),
-      ])
+      await invalidateConfigurationConsumers(client, organizationId)
       toast.add({
         title: 'Configuration enregistrée',
         description: type.name,
@@ -227,7 +179,31 @@ function ConfigurationEditor({
     },
   })
   const busy = mutation.isPending || relatedBusy
-  saving.current = busy
+  const editDraft = (
+    change: (previous: EntityConfiguration) => EntityConfiguration,
+  ) => {
+    setDraft(change)
+    mutation.reset()
+  }
+  const resetTo = (current: ConfiguredEntityType) => {
+    setBase(current)
+    setDraft(structuredClone(current.configuration))
+    mutation.reset()
+  }
+  const put = (kind: DefinitionKind, item: DefinitionItem) =>
+    editDraft((previous) => putDefinition(previous, kind, item))
+  const remove = (kind: DefinitionKind, item: DefinitionItem) => {
+    const dependencies = dependentDefinitions(item.id, catalog)
+    if (dependencies.length) {
+      toast.add({
+        title: 'Définition utilisée',
+        description: dependencies.join(', '),
+        type: 'warning',
+      })
+      return
+    }
+    editDraft((previous) => removeDefinition(previous, kind, item.id))
+  }
   const saveRelatedProfile = async (
     target: ConfiguredEntityType,
     profile: DisplayProfile,
@@ -248,10 +224,7 @@ function ConfigurationEditor({
         (previous) =>
           previous?.map((item) => (item.id === result.id ? result : item)),
       )
-      await Promise.all([
-        client.invalidateQueries({ queryKey: entityTypeKeys(organizationId) }),
-        client.invalidateQueries({ queryKey: recordRootKey(organizationId) }),
-      ])
+      await invalidateConfigurationConsumers(client, organizationId)
       toast.add({
         title: 'Profil enregistré',
         description: `${profile.name} · ${target.name}`,
@@ -264,57 +237,42 @@ function ConfigurationEditor({
       throw error
     }
   }
-  const put = (kind: DefinitionKind, item: DefinitionItem) => {
-    setDraft((previous) => {
-      const existing = previous[kind] as DefinitionItem[]
-      const next = existing.some((value) => value.id === item.id)
-        ? existing.map((value) => (value.id === item.id ? item : value))
-        : [...existing, item]
-      if (kind === 'views' || kind === 'display_profiles') {
-        const defaultItem = (item as DisplayProfile | ViewDefinition).is_default
-          ? item.id
-          : ((next as (DisplayProfile | ViewDefinition)[]).find(
-              (value) => value.is_default,
-            )?.id ?? next[0]?.id)
-        return {
-          ...previous,
-          [kind]: next.map((value) => ({
-            ...value,
-            is_default: value.id === defaultItem,
-          })),
-        }
-      }
-      return { ...previous, [kind]: next }
-    })
-    mutation.reset()
-  }
-  const remove = (kind: DefinitionKind, item: DefinitionItem) => {
-    const dependencies = dependentDefinitions(item.id, catalog)
-    if (dependencies.length) {
-      toast.add({
-        title: 'Définition utilisée',
-        description: dependencies.join(', '),
-        type: 'warning',
+  const reload = async () => {
+    setReloadBusy(true)
+    try {
+      const fresh = await client.fetchQuery({
+        ...configurationCatalogQuery(organizationId),
+        staleTime: 0,
       })
-      return
+      const current = fresh.find((item) => item.id === type.id)
+      if (!current) throw new Error('Ce type n’existe plus.')
+      resetTo(current)
+      setReloading(false)
+    } catch (error) {
+      toast.add({
+        title: 'Rechargement impossible',
+        description: configurationError(error),
+        type: 'error',
+      })
+    } finally {
+      setReloadBusy(false)
     }
-    setDraft((previous) => {
-      const next = previous[kind].filter((value) => value.id !== item.id)
-      if (
-        (kind === 'views' || kind === 'display_profiles') &&
-        next.length &&
-        !(next as (DisplayProfile | ViewDefinition)[]).some(
-          (value) => value.is_default,
-        )
-      )
-        return {
-          ...previous,
-          [kind]: next.map((value, i) => ({ ...value, is_default: i === 0 })),
-        }
-      return { ...previous, [kind]: next }
-    })
-    mutation.reset()
   }
+  const tabCount = (kind: DefinitionKind) =>
+    kind === 'relations'
+      ? navigations(type.id, catalog).length
+      : kind === 'fields'
+        ? draft.fields.length + type.available_system_fields.length
+        : draft[kind].length
+  const tableActions = (kind: DefinitionKind) => ({
+    type,
+    catalog,
+    busy,
+    onAdd: () => setEditing({ kind }),
+    onEdit: (item: DefinitionItem) => setEditing({ kind, item }),
+    onRemove: (item: DefinitionItem) => remove(kind, item),
+  })
+
   return (
     <div className="relative mx-auto flex h-full min-h-0 min-w-0 w-full max-w-7xl flex-col gap-4">
       <div className="flex shrink-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -379,141 +337,48 @@ function ConfigurationEditor({
       <Tabs defaultValue="fields" className="min-h-0 min-w-0 flex-1 gap-4">
         <div className="shrink-0 overflow-x-auto">
           <TabsList>
-            {kinds.map((kind) => (
+            {definitionKinds.map((kind) => (
               <TabsTrigger key={kind} value={kind} className="group">
                 {labels[kind]}
                 <Badge
                   variant="secondary"
                   className="h-4 min-w-4 px-1 text-[10px] group-data-active:bg-primary group-data-active:text-primary-foreground"
                 >
-                  {kind === 'relations'
-                    ? navigations(type.id, catalog).length
-                    : kind === 'fields'
-                      ? draft.fields.length +
-                        type.available_system_fields.length
-                      : draft[kind].length}
+                  {tabCount(kind)}
                 </Badge>
               </TabsTrigger>
             ))}
             <TabsTrigger value="preview">Aperçu</TabsTrigger>
           </TabsList>
         </div>
-        {kinds.map((kind) => (
+        {definitionKinds.map((kind) => (
           <TabsContent
             key={kind}
             value={kind}
             className={
-              kind === 'fields' || kind === 'relations' || kind === 'views'
-                ? `flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${changeCount > 0 ? 'pb-20' : 'pb-1'}`
-                : 'min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto pb-24'
+              kind === 'display_profiles'
+                ? 'min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto pb-24'
+                : `flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${changeCount > 0 ? 'pb-20' : 'pb-1'}`
             }
           >
             {kind === 'fields' ? (
               <FieldsTable
-                type={type}
-                catalog={catalog}
-                busy={busy}
-                onAdd={() => setEditing({ kind: 'fields' })}
-                onEdit={(item) => setEditing({ kind: 'fields', item })}
-                onRemove={(item) => remove('fields', item)}
-                onReorder={(fields) => {
-                  setDraft((previous) => ({ ...previous, fields }))
-                  mutation.reset()
-                }}
+                {...tableActions(kind)}
+                onReorder={(fields) =>
+                  editDraft((previous) => ({ ...previous, fields }))
+                }
               />
             ) : kind === 'relations' ? (
-              <RelationsTable
-                type={type}
-                catalog={catalog}
-                busy={busy}
-                onAdd={() => setEditing({ kind: 'relations' })}
-                onEdit={(item) => setEditing({ kind: 'relations', item })}
-                onRemove={(item) => remove('relations', item)}
-              />
+              <RelationsTable {...tableActions(kind)} />
             ) : kind === 'views' ? (
               <ViewsTable
-                type={type}
-                catalog={catalog}
-                busy={busy}
-                onAdd={() => setEditing({ kind: 'views' })}
-                onEdit={(item) => setEditing({ kind: 'views', item })}
-                onRemove={(item) => remove('views', item)}
+                {...tableActions(kind)}
                 onSetDefault={(item) =>
                   put('views', { ...item, is_default: true })
                 }
               />
             ) : (
-              <>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm text-muted-foreground">
-                    Composez un titre, un sous-titre et un avatar réutilisables.
-                  </p>
-                  <Button
-                    size="sm"
-                    onClick={() => setEditing({ kind })}
-                    disabled={busy}
-                  >
-                    <Plus />
-                    Ajouter
-                  </Button>
-                </div>
-                {draft[kind].map((item) => {
-                  const dependencies = dependentDefinitions(item.id, catalog)
-                  return (
-                    <div
-                      key={item.id}
-                      className="flex items-start gap-3 rounded-xl border bg-card p-4"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium break-words">
-                          {item.name}
-                          {item.is_default && (
-                            <Badge className="ml-2" variant="secondary">
-                              Par défaut
-                            </Badge>
-                          )}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground break-words">
-                          {`${item.title_fields.map((id) => [...type.available_system_fields, ...draft.fields].find((field) => field.id === id)?.name ?? 'Champ absent').join(item.separator)}${item.image_field ? ' · Avec avatar' : ''}`}
-                        </p>
-                        {dependencies.length > 0 && (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Utilisé par {dependencies.join(', ')}
-                          </p>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        disabled={busy}
-                        aria-label={`Modifier ${item.name}`}
-                        onClick={() => setEditing({ kind, item })}
-                      >
-                        <Pencil />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        disabled={busy || dependencies.length > 0}
-                        title={
-                          dependencies.length
-                            ? 'Retirez les références avant de supprimer cette définition.'
-                            : undefined
-                        }
-                        aria-label={`Supprimer ${item.name}`}
-                        onClick={() => remove(kind, item)}
-                      >
-                        <Trash2 />
-                      </Button>
-                    </div>
-                  )
-                })}
-                {!draft[kind].length && (
-                  <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-                    Aucune définition pour le moment.
-                  </div>
-                )}
-              </>
+              <DisplayProfilesList {...tableActions(kind)} />
             )}
           </TabsContent>
         ))}
@@ -525,65 +390,37 @@ function ConfigurationEditor({
         </TabsContent>
       </Tabs>
       {changeCount > 0 && (
-        <div
-          className="absolute bottom-3 left-1/2 z-30 flex w-max max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-3 rounded-2xl border bg-background px-4 py-2 shadow-lg sm:rounded-full"
-          role="region"
-          aria-label="Modifications de configuration"
-        >
-          <p className="flex items-center gap-2 text-xs" role="status">
-            <span className="size-1.5 shrink-0 rounded-full bg-amber-400" />
-            {changeCount} modification{changeCount > 1 ? 's' : ''} non
-            enregistrée{changeCount > 1 ? 's' : ''}
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={busy || editing !== null}
-              onClick={() => setDiscarding(true)}
-            >
-              Annuler
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={busy || editing !== null}
-              onClick={() => mutation.mutate()}
-            >
-              {mutation.isPending && <LoaderCircle className="animate-spin" />}
-              Enregistrer
-            </Button>
-          </div>
-        </div>
+        <UnsavedChangesBar
+          count={changeCount}
+          disabled={busy || editing !== null}
+          saving={mutation.isPending}
+          onDiscard={() => setDiscarding(true)}
+          onSave={() => mutation.mutate()}
+        />
       )}
-      <AlertDialog open={discarding} onOpenChange={setDiscarding}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Annuler les modifications ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Le brouillon sera remplacé par la dernière configuration
-              enregistrée.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <Button variant="outline" onClick={() => setDiscarding(false)}>
-              Continuer la configuration
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={busy}
-              onClick={() => {
-                setDraft(structuredClone(base.configuration))
-                mutation.reset()
-                setDiscarding(false)
-              }}
-            >
-              Annuler les modifications
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={discarding}
+        onOpenChange={setDiscarding}
+        title="Annuler les modifications ?"
+        description="Le brouillon sera remplacé par la dernière configuration enregistrée."
+        cancelLabel="Continuer la configuration"
+        confirmLabel="Annuler les modifications"
+        destructive
+        disabled={busy}
+        onConfirm={() => {
+          resetTo(base)
+          setDiscarding(false)
+        }}
+      />
+      <ConfirmDialog
+        open={reloading}
+        onOpenChange={setReloading}
+        title="Recharger la configuration ?"
+        description="Les modifications non enregistrées seront abandonnées."
+        confirmLabel="Recharger"
+        disabled={reloadBusy}
+        onConfirm={reload}
+      />
       {editing && (
         <DefinitionSheet
           key={`${editing.kind}/${editing.item?.id ?? 'new'}`}
@@ -598,104 +435,11 @@ function ConfigurationEditor({
           onClose={() => setEditing(null)}
         />
       )}
-      <AlertDialog
-        open={pendingOrganization !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingOrganization(null)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Changer d’organisation ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Le brouillon de configuration de cette organisation sera
-              abandonné.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setPendingOrganization(null)}
-            >
-              Continuer la configuration
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (!pendingOrganization) return
-                allowOrganizationChange.current = true
-                selectOrganization(pendingOrganization)
-                allowOrganizationChange.current = false
-                setPendingOrganization(null)
-              }}
-            >
-              Changer d’organisation
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog
-        open={blocker.status === 'blocked'}
-        onOpenChange={(open) => {
-          if (!open) blocker.reset?.()
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Quitter sans enregistrer ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Vos modifications de configuration ne sont pas enregistrées.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <Button variant="outline" onClick={() => blocker.reset?.()}>
-              Continuer la configuration
-            </Button>
-            <Button variant="destructive" onClick={() => blocker.proceed?.()}>
-              Quitter
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog open={reloading} onOpenChange={setReloading}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Recharger la configuration ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Les modifications non enregistrées seront abandonnées.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <Button variant="outline" onClick={() => setReloading(false)}>
-              Annuler
-            </Button>
-            <Button
-              onClick={async () => {
-                try {
-                  const fresh = await client.fetchQuery({
-                    ...configurationCatalogQuery(organizationId),
-                    staleTime: 0,
-                  })
-                  const current = fresh.find((item) => item.id === type.id)
-                  if (!current) throw new Error('Ce type n’existe plus.')
-                  setBase(current)
-                  setDraft(structuredClone(current.configuration))
-                  mutation.reset()
-                  setReloading(false)
-                } catch (error) {
-                  toast.add({
-                    title: 'Rechargement impossible',
-                    description: configurationError(error),
-                    type: 'error',
-                  })
-                }
-              }}
-            >
-              Recharger
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DraftProtection
+        dirty={dirty}
+        busy={busy}
+        description="Vos modifications de configuration ne sont pas enregistrées."
+      />
     </div>
   )
 }

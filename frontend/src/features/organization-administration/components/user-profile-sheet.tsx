@@ -15,13 +15,13 @@ import {
 } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
 import { errorMessage } from '@/lib/api/client'
-import { recordRootKey } from '@/features/entity-records/creation'
 import {
   organizationUserProfileSchema,
   organizationUsersKey,
   updateOrganizationUserProfile,
 } from '../users'
 import type { OrganizationUser, OrganizationUserProfileInput } from '../users'
+import { invalidateRecordData } from '@/features/entity-records/invalidation'
 
 export function OrganizationUserProfileSheet({
   user,
@@ -44,7 +44,7 @@ export function OrganizationUserProfileSheet({
         client.invalidateQueries({
           queryKey: organizationUsersKey(organizationId),
         }),
-        client.invalidateQueries({ queryKey: recordRootKey(organizationId) }),
+        invalidateRecordData(client, organizationId),
       ])
       toast.add({
         title: 'Profil enregistré',

@@ -16,16 +16,9 @@ import type { ServerColumn } from '@/components/data-table/server-table'
 import { useListPageBoundary } from '@/components/data-table/use-list-page-boundary'
 import { useServerList } from '@/components/data-table/use-server-list'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -219,68 +212,45 @@ export function UsersPage() {
           }
         />
       )}
-      <AlertDialog
+      <ConfirmDialog
         open={!!selected}
         onOpenChange={(open) => {
-          if (!open && !status.isPending) setSelected(null)
+          if (!open) setSelected(null)
         }}
-      >
-        <AlertDialogContent className="max-w-[calc(100%-2rem)] sm:max-w-md">
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {selected?.is_active
-                ? 'Suspendre le compte ?'
-                : 'Réactiver le compte ?'}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              <span className="break-all">{selected?.email}</span>
-              <br />
-              {selected?.is_active
-                ? 'Ce compte ne pourra plus utiliser l’application tant qu’il sera suspendu.'
-                : 'Ce compte pourra à nouveau se connecter s’il est activé.'}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {status.isError && (
-            <Alert variant="destructive" className="shrink-0">
-              <AlertDescription>{errorMessage(status.error)}</AlertDescription>
-            </Alert>
-          )}
-          <AlertDialogFooter>
-            <Button
-              variant="outline"
-              disabled={status.isPending}
-              onClick={() => setSelected(null)}
-            >
-              Annuler
-            </Button>
-            <Button
-              disabled={status.isPending || !selected}
-              onClick={async () => {
-                if (!selected) return
-                try {
-                  await status.mutateAsync(selected)
-                  toast.add({
-                    title: selected.is_active
-                      ? 'Compte suspendu'
-                      : 'Compte réactivé',
-                    description: selected.email,
-                    type: 'success',
-                  })
-                  setSelected(null)
-                } catch {
-                  /* Keep confirmation open. */
-                }
-              }}
-            >
-              {status.isPending
-                ? 'Traitement…'
-                : selected?.is_active
-                  ? 'Suspendre'
-                  : 'Réactiver'}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title={
+          selected?.is_active
+            ? 'Suspendre le compte ?'
+            : 'Réactiver le compte ?'
+        }
+        description={
+          <>
+            <span className="break-all">{selected?.email}</span>
+            <br />
+            {selected?.is_active
+              ? 'Ce compte ne pourra plus utiliser l’application tant qu’il sera suspendu.'
+              : 'Ce compte pourra à nouveau se connecter s’il est activé.'}
+          </>
+        }
+        error={status.isError && errorMessage(status.error)}
+        confirmLabel={selected?.is_active ? 'Suspendre' : 'Réactiver'}
+        pendingLabel="Traitement…"
+        pending={status.isPending}
+        disabled={!selected}
+        onConfirm={async () => {
+          if (!selected) return
+          try {
+            await status.mutateAsync(selected)
+            toast.add({
+              title: selected.is_active ? 'Compte suspendu' : 'Compte réactivé',
+              description: selected.email,
+              type: 'success',
+            })
+            setSelected(null)
+          } catch {
+            /* Keep confirmation open. */
+          }
+        }}
+      />
       {linkingUser && (
         <MembershipLinkSheet
           key={linkingUser.id}
