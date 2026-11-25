@@ -216,7 +216,7 @@ function ScopedFileManager({ organizationId }: { organizationId: string }) {
         <ConfirmDialog
           open
           onOpenChange={(open) => {
-            if (!open && !mutation.isPending) setDeleting(null)
+            if (!open) setDeleting(null)
           }}
           title="Supprimer ce fichier ?"
           description={`Le fichier « ${deleting.filename} » sera supprimé définitivement du stockage. Cette action est possible uniquement s’il n’est plus lié à une fiche.`}

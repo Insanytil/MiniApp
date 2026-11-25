@@ -261,9 +261,7 @@ export function RecordForm({
       </form>
       <ConfirmDialog
         open={reloading}
-        onOpenChange={(open) => {
-          if (!reloadBusy) setReloading(open)
-        }}
+        onOpenChange={setReloading}
         title="Recharger le formulaire ?"
         description="Les valeurs saisies seront abandonnées pour charger la configuration actuelle."
         confirmLabel="Recharger"

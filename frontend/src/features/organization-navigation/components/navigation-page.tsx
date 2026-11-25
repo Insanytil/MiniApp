@@ -235,9 +235,7 @@ function MenuEditor({
       />
       <ConfirmDialog
         open={reloading}
-        onOpenChange={(open) => {
-          if (!reloadBusy) setReloading(open)
-        }}
+        onOpenChange={setReloading}
         title="Recharger le menu ?"
         description="Le brouillon non enregistré sera abandonné."
         confirmLabel="Recharger"

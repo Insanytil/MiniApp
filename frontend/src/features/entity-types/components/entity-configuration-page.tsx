@@ -146,6 +146,7 @@ function ConfigurationEditor({
     item?: DefinitionItem
   } | null>(null)
   const [reloading, setReloading] = useState(false)
+  const [reloadBusy, setReloadBusy] = useState(false)
   const [discarding, setDiscarding] = useState(false)
   const [definitionDirty, setDefinitionDirty] = useState(false)
   const [relatedBusy, setRelatedBusy] = useState(false)
@@ -237,6 +238,7 @@ function ConfigurationEditor({
     }
   }
   const reload = async () => {
+    setReloadBusy(true)
     try {
       const fresh = await client.fetchQuery({
         ...configurationCatalogQuery(organizationId),
@@ -252,6 +254,8 @@ function ConfigurationEditor({
         description: configurationError(error),
         type: 'error',
       })
+    } finally {
+      setReloadBusy(false)
     }
   }
   const tabCount = (kind: DefinitionKind) =>
@@ -414,6 +418,7 @@ function ConfigurationEditor({
         title="Recharger la configuration ?"
         description="Les modifications non enregistrées seront abandonnées."
         confirmLabel="Recharger"
+        disabled={reloadBusy}
         onConfirm={reload}
       />
       {editing && (

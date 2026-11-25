@@ -11,7 +11,8 @@ import {
 
 /**
  * A two-button confirmation: dismiss, or confirm the described action.
- * `children` render between the description and the buttons (e.g. an error).
+ * While `disabled`, both buttons are greyed out and the dialog cannot be
+ * dismissed. `children` render between the description and the buttons (e.g. an error).
  */
 export function ConfirmDialog({
   open,
@@ -37,7 +38,12 @@ export function ConfirmDialog({
   children?: ReactNode
 }) {
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!disabled) onOpenChange(next)
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
@@ -45,7 +51,11 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         {children}
         <AlertDialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            disabled={disabled}
+            onClick={() => onOpenChange(false)}
+          >
             {cancelLabel}
           </Button>
           <Button
