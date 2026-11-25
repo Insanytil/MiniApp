@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import {
   AlertDialog,
   AlertDialogContent,
@@ -58,7 +59,14 @@ export function ConfirmDialog({
         if (!locked) onOpenChange(next)
       }}
     >
-      <AlertDialogContent className={contentClassName}>
+      <AlertDialogContent
+        className={cn(
+          // The base content caps at max-w-sm through a data-[size] variant,
+          // which a plain sm:max-w-* cannot override: widen it on that variant.
+          'max-h-[calc(100svh-2rem)] max-w-[calc(100%-2rem)] overflow-y-auto data-[size=default]:sm:max-w-md',
+          contentClassName,
+        )}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
@@ -69,7 +77,7 @@ export function ConfirmDialog({
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        <AlertDialogFooter>
+        <AlertDialogFooter className="sm:flex-wrap">
           <Button
             variant="outline"
             disabled={locked}

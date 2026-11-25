@@ -26,7 +26,6 @@ export function OrganizationActionDialog({
       onOpenChange={(open) => {
         if (!open) onClose()
       }}
-      contentClassName="max-h-[calc(100svh-2rem)] max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-md"
       title={`${label} l’organisation ?`}
       description={
         <>

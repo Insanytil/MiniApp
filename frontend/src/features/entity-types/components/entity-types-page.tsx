@@ -210,7 +210,6 @@ function ScopedEntityTypesPage({
           onOpenChange={(open) => {
             if (!open) setDeleting(null)
           }}
-          contentClassName="max-h-[calc(100svh-2rem)] max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-md"
           title="Supprimer le type d’entité ?"
           description={`La définition « ${deleting.name} » (${deleting.technical_name}) sera supprimée. Cette action est définitive.`}
           error={remove.isError && entityTypeError(remove.error)}

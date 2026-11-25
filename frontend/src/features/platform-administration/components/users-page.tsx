@@ -217,7 +217,6 @@ export function UsersPage() {
         onOpenChange={(open) => {
           if (!open) setSelected(null)
         }}
-        contentClassName="max-w-[calc(100%-2rem)] sm:max-w-md"
         title={
           selected?.is_active
             ? 'Suspendre le compte ?'

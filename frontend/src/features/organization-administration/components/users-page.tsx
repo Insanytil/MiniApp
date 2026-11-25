@@ -243,7 +243,6 @@ function ScopedUsersPage({ organization }: { organization: UserOrganization }) {
           onOpenChange={(open) => {
             if (!open) setTarget(null)
           }}
-          contentClassName="max-h-[calc(100svh-2rem)] max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-md"
           title={`${target.membership_is_active ? 'Suspendre' : 'Réactiver'} l’accès ?`}
           description={
             <>
